@@ -8,7 +8,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../basic/commons.dart';
 import '../basic/methods.dart';
 import '../configs/import_notice.dart';
-import '../configs/is_pro.dart';
+import '../configs/local_build.dart';
 import '../configs/android_version.dart';
 import 'components/content_loading.dart';
 import 'components/right_click_pop.dart';
@@ -141,9 +141,9 @@ class _DownloadImportScreenState extends State<DownloadImportScreen> {
         }
       },
       child: Text(
-        '选择.jm.zip文件进行导入\n选择jmi文件进行导入' + (!isPro ? "\n(发电后使用)" : ""),
+        '选择.jm.zip文件进行导入\n选择jmi文件进行导入' + (!localFeaturesEnabled ? "\n(发电后使用)" : ""),
         style: TextStyle(
-          color: !isPro ? Colors.grey : null,
+          color: !localFeaturesEnabled ? Colors.grey : null,
         ),
         textAlign: TextAlign.center,
       ),
@@ -185,9 +185,9 @@ class _DownloadImportScreenState extends State<DownloadImportScreen> {
         }
       },
       child: Text(
-        '选择文件夹\n(导入里面所有的zip/jmi)' + (!isPro ? "\n(发电后使用)" : ""),
+        '选择文件夹\n(导入里面所有的zip/jmi)' + (!localFeaturesEnabled ? "\n(发电后使用)" : ""),
         style: TextStyle(
-          color: !isPro ? Colors.grey : null,
+          color: !localFeaturesEnabled ? Colors.grey : null,
         ),
         textAlign: TextAlign.center,
       ),

@@ -1,4 +1,3 @@
-import 'package:event/event.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -10,22 +9,19 @@ import 'package:jasmine/screens/comic_info_screen.dart';
 import 'package:jasmine/screens/components/content_builder.dart';
 import 'package:jasmine/screens/components/types.dart';
 
-import '../../configs/is_pro.dart';
 import 'comic_list.dart';
-
-const _noProMax = 10;
 
 class ComicPager extends StatefulWidget {
   final Future<InnerComicPage> Function(int page) onPage;
   final List<ComicLongPressMenuItem>? longPressMenuItems;
   final List<Widget>? appendList;
 
-  const ComicPager(
-      {required this.onPage,
-      this.longPressMenuItems,
-      this.appendList,
-      Key? key})
-      : super(key: key);
+  const ComicPager({
+    required this.onPage,
+    this.longPressMenuItems,
+    this.appendList,
+    Key? key,
+  }) : super(key: key);
 
   @override
   State<StatefulWidget> createState() => _ComicPagerState();
@@ -53,14 +49,16 @@ class _ComicPagerState extends State<ComicPager> {
     switch (currentPagerControllerMode) {
       case PagerControllerMode.stream:
         return _StreamPager(
-            onPage: widget.onPage,
-            longPressMenuItems: widget.longPressMenuItems,
-            appendList: widget.appendList);
+          onPage: widget.onPage,
+          longPressMenuItems: widget.longPressMenuItems,
+          appendList: widget.appendList,
+        );
       case PagerControllerMode.pager:
         return _PagerPager(
-            onPage: widget.onPage,
-            longPressMenuItems: widget.longPressMenuItems,
-            appendList: widget.appendList);
+          onPage: widget.onPage,
+          longPressMenuItems: widget.longPressMenuItems,
+          appendList: widget.appendList,
+        );
     }
   }
 }
@@ -70,12 +68,12 @@ class _StreamPager extends StatefulWidget {
   final List<ComicLongPressMenuItem>? longPressMenuItems;
   final List<Widget>? appendList;
 
-  const _StreamPager(
-      {Key? key,
-      required this.onPage,
-      this.longPressMenuItems,
-      this.appendList})
-      : super(key: key);
+  const _StreamPager({
+    Key? key,
+    required this.onPage,
+    this.longPressMenuItems,
+    this.appendList,
+  }) : super(key: key);
 
   @override
   State<StatefulWidget> createState() => _StreamPagerState();
@@ -86,22 +84,22 @@ class _StreamPagerState extends State<_StreamPager> {
   int _nextPage = 1;
   int _total = 0;
 
-  bool get _noPro => !isPro && _nextPage > _noProMax;
-
   var _joining = false;
   var _joinSuccess = true;
 
   Future _join() async {
+    if (_joining || !mounted) return;
     try {
       setState(() {
         _joining = true;
       });
       var response = await widget.onPage(_nextPage);
+      if (!mounted) return;
       if (_nextPage == 1) {
         if (_redirectAid(response.redirectAid, context)) {
           return;
         }
-        if (response.total == 0) {
+        if (response.total <= 0 || response.list.isEmpty) {
           _maxPage = 1;
         } else {
           _maxPage = (response.total / response.list.length).ceil();
@@ -116,6 +114,7 @@ class _StreamPagerState extends State<_StreamPager> {
       });
     } catch (e, st) {
       debugPrient("$e\n$st");
+      if (!mounted) return;
       setState(() {
         _joinSuccess = false;
         _joining = false;
@@ -128,11 +127,7 @@ class _StreamPagerState extends State<_StreamPager> {
   final TextEditingController _textEditController = TextEditingController();
 
   _jumpPage() {
-    if (_total == 0) {
-      return;
-    }
-    if (!isPro) {
-      defaultToast(context, "发电才能跳页哦~");
+    if (_total == 0 || _joining) {
       return;
     }
     _textEditController.clear();
@@ -143,9 +138,7 @@ class _StreamPagerState extends State<_StreamPager> {
           content: Card(
             child: TextField(
               controller: _textEditController,
-              decoration: const InputDecoration(
-                labelText: "请输入页数：",
-              ),
+              decoration: const InputDecoration(labelText: "请输入页数："),
               keyboardType: TextInputType.number,
               inputFormatters: <TextInputFormatter>[
                 FilteringTextInputFormatter.allow(RegExp(r'\d+')),
@@ -184,22 +177,20 @@ class _StreamPagerState extends State<_StreamPager> {
 
   @override
   void initState() {
-    proEvent.subscribe(_setState);
+    super.initState();
     _controller = ScrollController();
     _join();
-    super.initState();
   }
 
   @override
   void dispose() {
-    proEvent.unsubscribe(_setState);
     _textEditController.dispose();
     _controller.dispose();
     super.dispose();
   }
 
   void _onScroll() {
-    if (_joining || _nextPage > _maxPage || _noPro) {
+    if (_joining || _nextPage > _maxPage) {
       return;
     }
     if (_controller.position.pixels + 100 >
@@ -209,31 +200,13 @@ class _StreamPagerState extends State<_StreamPager> {
   }
 
   Widget? _buildLoadingCard() {
-    if (_noPro) {
-      return Card(
-        child: Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.only(top: 10, bottom: 10),
-              child: const Icon(Icons.power_off_outlined),
-            ),
-            const Text(
-              '$_noProMax页以上需要发电鸭',
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      );
-    }
     if (_joining) {
       return Card(
         child: Column(
           children: [
             Container(
               padding: const EdgeInsets.only(top: 10, bottom: 10),
-              child: const CupertinoActivityIndicator(
-                radius: 14,
-              ),
+              child: const CupertinoActivityIndicator(radius: 14),
             ),
             const Text('加载中'),
           ],
@@ -271,12 +244,10 @@ class _StreamPagerState extends State<_StreamPager> {
             controller: _controller,
             onScroll: _onScroll,
             data: _data,
-            appendList: _buildLoadingCard() != null
-                ? [
-                    _buildLoadingCard()!,
-                    ...(widget.appendList ?? []),
-                  ]
-                : widget.appendList,
+            appendList:
+                _buildLoadingCard() != null
+                    ? [_buildLoadingCard()!, ...(widget.appendList ?? [])]
+                    : widget.appendList,
             longPressMenuItems: widget.longPressMenuItems,
           ),
         ),
@@ -316,10 +287,6 @@ class _StreamPagerState extends State<_StreamPager> {
       ),
     );
   }
-
-  void _setState(EventArgs? args) {
-    setState(() {});
-  }
 }
 
 class _PagerPager extends StatefulWidget {
@@ -327,20 +294,21 @@ class _PagerPager extends StatefulWidget {
   final List<ComicLongPressMenuItem>? longPressMenuItems;
   final List<Widget>? appendList;
 
-  const _PagerPager(
-      {Key? key,
-      required this.onPage,
-      this.longPressMenuItems,
-      this.appendList})
-      : super(key: key);
+  const _PagerPager({
+    Key? key,
+    required this.onPage,
+    this.longPressMenuItems,
+    this.appendList,
+  }) : super(key: key);
 
   @override
   State<StatefulWidget> createState() => _PagerPagerState();
 }
 
 class _PagerPagerState extends State<_PagerPager> {
-  final TextEditingController _textEditController =
-      TextEditingController(text: '');
+  final TextEditingController _textEditController = TextEditingController(
+    text: '',
+  );
   late int _currentPage = 1;
   late int _maxPage = 1;
   late final List<ComicSimple> _data = [];
@@ -348,13 +316,15 @@ class _PagerPagerState extends State<_PagerPager> {
   late Key _pageKey = UniqueKey();
 
   Future<dynamic> _load() async {
-    var response = await widget.onPage(_currentPage);
+    final requestedPage = _currentPage;
+    var response = await widget.onPage(requestedPage);
+    if (!mounted || requestedPage != _currentPage) return;
     setState(() {
       if (_currentPage == 1) {
         if (_redirectAid(response.redirectAid, context)) {
           return;
         }
-        if (response.total == 0) {
+        if (response.total <= 0 || response.list.isEmpty) {
           _maxPage = 1;
         } else {
           _maxPage = (response.total / response.list.length).ceil();
@@ -421,10 +391,6 @@ class _PagerPagerState extends State<_PagerPager> {
             children: [
               InkWell(
                 onTap: () {
-                  if (!isPro) {
-                    defaultToast(context, "发电才能跳页哦~");
-                    return;
-                  }
                   _textEditController.clear();
                   showDialog(
                     context: context,
@@ -473,11 +439,7 @@ class _PagerPagerState extends State<_PagerPager> {
                     },
                   );
                 },
-                child: Row(
-                  children: [
-                    Text("第 $_currentPage / $_maxPage 页"),
-                  ],
-                ),
+                child: Row(children: [Text("第 $_currentPage / $_maxPage 页")]),
               ),
               Row(
                 children: [
@@ -498,10 +460,6 @@ class _PagerPagerState extends State<_PagerPager> {
                     minWidth: 0,
                     onPressed: () {
                       if (_currentPage < _maxPage) {
-                        if (!isPro && _currentPage + 1 > _noProMax) {
-                          defaultToast(context, "$_noProMax页以上需要发电鸭");
-                          return;
-                        }
                         setState(() {
                           _currentPage = _currentPage + 1;
                           _pageFuture = _load();
@@ -510,7 +468,7 @@ class _PagerPagerState extends State<_PagerPager> {
                       }
                     },
                     child: const Text('下一页'),
-                  )
+                  ),
                 ],
               ),
             ],
@@ -523,10 +481,13 @@ class _PagerPagerState extends State<_PagerPager> {
 
 bool _redirectAid(int? redirectAid, BuildContext context) {
   if (redirectAid != null) {
-    Navigator.of(context)
-        .pushReplacement(MaterialPageRoute(builder: (BuildContext context) {
-      return ComicInfoScreen(redirectAid, null);
-    }));
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        builder: (BuildContext context) {
+          return ComicInfoScreen(redirectAid, null);
+        },
+      ),
+    );
     return true;
   }
   return false;

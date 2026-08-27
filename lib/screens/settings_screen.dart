@@ -31,7 +31,7 @@ import '../configs/disable_recommend_content.dart';
 import '../configs/export_rename.dart';
 import '../configs/ignore_upgrade_pop.dart';
 import '../configs/ignore_view_log.dart';
-import '../configs/is_pro.dart';
+import '../configs/local_build.dart';
 import '../configs/login.dart';
 import '../configs/no_animation.dart';
 import '../configs/proxy.dart';
@@ -289,7 +289,7 @@ class _SettingsState extends State<SettingsScreen> {
                 if (_startupImageExists) _deleteStartupImageTile(context),
                 const Divider(),
                 disableRecommendContentSetting(),
-                if (isPro) ...[
+                if (localFeaturesEnabled) ...[
                   const Divider(),
                   autoUpdateCheckSetting(),
                   ignoreUpgradePopSetting(),

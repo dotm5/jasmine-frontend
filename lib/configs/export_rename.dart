@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../basic/commons.dart';
 import '../basic/methods.dart';
-import 'is_pro.dart';
+import 'local_build.dart';
 
 const _propertyName = "exportRename";
 late bool _exportRename;
@@ -32,17 +32,17 @@ Widget exportRenameSetting() {
         title: Text(
           "导出的时候重新命名",
           style: TextStyle(
-            color: !isPro ? Colors.grey : null,
+            color: !localFeaturesEnabled ? Colors.grey : null,
           ),
         ),
         subtitle: Text(
           _exportRename ? "是" : "否",
           style: TextStyle(
-            color: !isPro ? Colors.grey : null,
+            color: !localFeaturesEnabled ? Colors.grey : null,
           ),
         ),
         onTap: () async {
-          if (!isPro) {
+          if (!localFeaturesEnabled) {
             return;
           }
           await _chooseExportRename(context);

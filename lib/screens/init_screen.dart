@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:jasmine/basic/commons.dart';
 import 'package:jasmine/basic/log.dart';
 import 'package:jasmine/basic/methods.dart';
 import 'package:jasmine/configs/Authentication.dart';
@@ -10,12 +9,9 @@ import 'package:jasmine/configs/configs.dart';
 import 'package:jasmine/configs/login.dart';
 
 import '../basic/web_dav_sync.dart';
-import '../configs/passed.dart';
 import 'app_screen.dart';
-import 'calculator_screen.dart';
 import 'first_login_screen.dart';
 import 'network_setting_screen.dart';
-import 'unlock_browser_screen.dart';
 
 class InitScreen extends StatefulWidget {
   const InitScreen({Key? key}) : super(key: key);
@@ -26,6 +22,8 @@ class InitScreen extends StatefulWidget {
 
 class _InitScreenState extends State<InitScreen> {
   String? _startupImagePath;
+  String? _initializationError;
+  bool _nativeReady = false;
 
   @override
   void initState() {
@@ -35,25 +33,56 @@ class _InitScreenState extends State<InitScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: _startupImagePath != null && _startupImagePath!.isNotEmpty
-          ? Center(
-              child: Image.file(
-                File(_startupImagePath!),
-                fit: BoxFit.contain,
-                width: MediaQuery.of(context).size.width,
-                height: MediaQuery.of(context).size.height,
-              ),
-            )
-          : const Center(
-              child: Text("initializing..."),
+    if (_initializationError != null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('初始化失败')),
+        body: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SelectableText(_initializationError!),
+                const SizedBox(height: 16),
+                const Text('请保留应用数据；原生库或存储问题修复后请重新启动应用。'),
+                TextButton(onPressed: _init, child: const Text('重试')),
+                if (_nativeReady)
+                  TextButton(
+                    onPressed:
+                        () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const NetworkSettingScreen(),
+                          ),
+                        ),
+                    child: const Text('网络设置'),
+                  ),
+              ],
             ),
+          ),
+        ),
+      );
+    }
+    return Scaffold(
+      body:
+          _startupImagePath != null && _startupImagePath!.isNotEmpty
+              ? Center(
+                child: Image.file(
+                  File(_startupImagePath!),
+                  fit: BoxFit.contain,
+                  width: MediaQuery.of(context).size.width,
+                  height: MediaQuery.of(context).size.height,
+                ),
+              )
+              : const Center(child: Text("initializing...")),
     );
   }
 
   Future _init() async {
+    if (!mounted) return;
+    setState(() => _initializationError = null);
     try {
       await methods.init();
+      _nativeReady = true;
       final startupImagePath = await methods.getStartupImagePath();
       if (mounted) {
         setState(() {
@@ -61,58 +90,26 @@ class _InitScreenState extends State<InitScreen> {
         });
       }
       await methods.init2();
+      if (!mounted) return;
       await initConfigs(context);
-      debugPrient("STATE : ${loginStatus}");
-      if (!currentPassed()) {
-        Future.delayed(Duration.zero, () async {
-          await webDavSyncAuto(context);
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (BuildContext context) {
-              if (Platform.isLinux) {
-                return const CalculatorScreen();
-              }
-              return const UnlockBrowserScreen();
-            }),
-          );
-        });
-      } else if (currentAuthentication()) {
-        Future.delayed(Duration.zero, () async {
-          await webDavSyncAuto(context);
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (BuildContext context) {
-              return const AuthScreen();
-            }),
-          );
-        });
+      if (!mounted) return;
+      debugPrient("STATE : $loginStatus");
+      await webDavSyncAuto(context);
+      if (!mounted) return;
+      final Widget next;
+      if (currentAuthentication()) {
+        next = const AuthScreen();
       } else if (loginStatus == LoginStatus.notSet) {
-        Future.delayed(Duration.zero, () async {
-          await webDavSyncAuto(context);
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (BuildContext context) {
-              return firstLoginScreen;
-            }),
-          );
-        });
+        next = firstLoginScreen;
       } else {
-        Future.delayed(Duration.zero, () async {
-          await webDavSyncAuto(context);
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (BuildContext context) {
-              return const AppScreen();
-            }),
-          );
-        });
+        next = const AppScreen();
       }
+      Navigator.of(
+        context,
+      ).pushReplacement(MaterialPageRoute(builder: (_) => next));
     } catch (e, st) {
       debugPrient("$e\n$st");
-      defaultToast(context, "初始化失败, 请设置网络");
-      Future.delayed(Duration.zero, () {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (BuildContext context) {
-            return const NetworkSettingScreen();
-          }),
-        );
-      });
+      if (mounted) setState(() => _initializationError = '$e');
     }
   }
 }
@@ -134,11 +131,13 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   test() async {
-    if (await verifyAuthentication(context)) {
+    if (await verifyAuthentication(context) && mounted) {
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (BuildContext context) {
-          return const AppScreen();
-        }),
+        MaterialPageRoute(
+          builder: (BuildContext context) {
+            return const AppScreen();
+          },
+        ),
       );
     }
   }
@@ -146,9 +145,7 @@ class _AuthScreenState extends State<AuthScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("身份验证"),
-      ),
+      appBar: AppBar(title: const Text("身份验证")),
       body: Center(
         child: Container(
           padding: const EdgeInsets.all(20),
@@ -156,9 +153,7 @@ class _AuthScreenState extends State<AuthScreen> {
             onPressed: () async {
               test();
             },
-            child: const Text(
-              '您在之前使用APP时开启了身份验证, 请点这段文字进行身份核查, 核查通过后将会进入APP',
-            ),
+            child: const Text('您在之前使用APP时开启了身份验证, 请点这段文字进行身份核查, 核查通过后将会进入APP'),
           ),
         ),
       ),

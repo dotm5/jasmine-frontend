@@ -7,7 +7,7 @@ import 'package:jasmine/basic/methods.dart';
 import '../basic/commons.dart';
 import '../configs/export_path.dart';
 import '../configs/export_rename.dart';
-import '../configs/is_pro.dart';
+import '../configs/local_build.dart';
 import 'components/content_loading.dart';
 import 'components/right_click_pop.dart';
 
@@ -87,9 +87,9 @@ class _DownloadsExportingScreen2State extends State<DownloadsExportingScreen2> {
         MaterialButton(
           onPressed: _exportJpegs,
           child: Text(
-            "导出成文件夹" + (!isPro ? "\n(发电后使用)" : ""),
+            "导出成文件夹" + (!localFeaturesEnabled ? "\n(发电后使用)" : ""),
             style: TextStyle(
-              color: !isPro ? Colors.grey : null,
+              color: !localFeaturesEnabled ? Colors.grey : null,
             ),
             textAlign: TextAlign.center,
           ),
@@ -98,9 +98,9 @@ class _DownloadsExportingScreen2State extends State<DownloadsExportingScreen2> {
         MaterialButton(
           onPressed: _exportPdf2,
           child: Text(
-            "导出成PDF" + (!isPro ? "\n(发电后使用)" : ""),
+            "导出成PDF" + (!localFeaturesEnabled ? "\n(发电后使用)" : ""),
             style: TextStyle(
-              color: !isPro ? Colors.grey : null,
+              color: !localFeaturesEnabled ? Colors.grey : null,
             ),
             textAlign: TextAlign.center,
           ),
@@ -109,9 +109,9 @@ class _DownloadsExportingScreen2State extends State<DownloadsExportingScreen2> {
         MaterialButton(
           onPressed: _exportEpub,
           child: Text(
-            "导出成EPUB" + (!isPro ? "\n(发电后使用)" : ""),
+            "导出成EPUB" + (!localFeaturesEnabled ? "\n(发电后使用)" : ""),
             style: TextStyle(
-              color: !isPro ? Colors.grey : null,
+              color: !localFeaturesEnabled ? Colors.grey : null,
             ),
             textAlign: TextAlign.center,
           ),
@@ -122,7 +122,7 @@ class _DownloadsExportingScreen2State extends State<DownloadsExportingScreen2> {
   }
 
   _exportJpegs() async {
-    if (!isPro) {
+    if (!localFeaturesEnabled) {
       defaultToast(context, "请先发电鸭");
       return;
     }
@@ -159,7 +159,7 @@ class _DownloadsExportingScreen2State extends State<DownloadsExportingScreen2> {
   }
 
   _exportPdf2() async {
-    if (!isPro) {
+    if (!localFeaturesEnabled) {
       defaultToast(context, "请先发电鸭");
       return;
     }
@@ -198,7 +198,7 @@ class _DownloadsExportingScreen2State extends State<DownloadsExportingScreen2> {
   }
 
   _exportEpub() async {
-    if (!isPro) {
+    if (!localFeaturesEnabled) {
       defaultToast(context, "请先发电鸭");
       return;
     }

@@ -7,7 +7,7 @@ import 'package:jasmine/basic/methods.dart';
 import '../basic/commons.dart';
 import '../configs/export_path.dart';
 import '../configs/export_rename.dart';
-import '../configs/is_pro.dart';
+import '../configs/local_build.dart';
 import 'components/content_loading.dart';
 import 'components/right_click_pop.dart';
 
@@ -86,35 +86,35 @@ class _DownloadsExportingScreenState extends State<DownloadsExportingScreen> {
         Container(height: 20),
         _buildButtonInner(
           _exportJmis,
-          "分别导出JMI" + (!isPro ? "\n(发电后使用)" : ""),
+          "分别导出JMI" + (!localFeaturesEnabled ? "\n(发电后使用)" : ""),
         ),
         Container(height: 20),
         _buildButtonInner(
           _exportZips,
-          "分别导出JM.ZIP" + (!isPro ? "\n(发电后使用)" : ""),
+          "分别导出JM.ZIP" + (!localFeaturesEnabled ? "\n(发电后使用)" : ""),
         ),
         Container(height: 20),
         _buildButtonInner(
           _exportJpegZips,
-          "分别导出JPEGS.ZIP" + (!isPro ? "\n(发电后使用)" : ""),
+          "分别导出JPEGS.ZIP" + (!localFeaturesEnabled ? "\n(发电后使用)" : ""),
         ),
         Container(height: 20),
         _buildButtonInner(
           _exportCbzsZips,
-          "分别导出CBZ" + (!isPro ? "\n(发电后使用)" : ""),
+          "分别导出CBZ" + (!localFeaturesEnabled ? "\n(发电后使用)" : ""),
         ),
         Container(height: 20),
         if (true) ...[
           _buildButtonInner(
             _exportPdf,
-            "分别导Pdf" + (!isPro ? "\n(发电后使用)" : ""),
+            "分别导Pdf" + (!localFeaturesEnabled ? "\n(发电后使用)" : ""),
           ),
           Container(height: 20),
         ],
         Container(height: 20),
         _buildButtonInner(
           _exportEpubs,
-          "分别导出EPUB" + (!isPro ? "\n(发电后使用)" : ""),
+          "分别导出EPUB" + (!localFeaturesEnabled ? "\n(发电后使用)" : ""),
         ),
         Container(height: 20),
       ],
@@ -143,7 +143,7 @@ class _DownloadsExportingScreenState extends State<DownloadsExportingScreen> {
   }
 
   _exportJmis() async {
-    if (!isPro) {
+    if (!localFeaturesEnabled) {
       defaultToast(context, "请先发电鸭");
       return;
     }
@@ -188,7 +188,7 @@ class _DownloadsExportingScreenState extends State<DownloadsExportingScreen> {
   }
 
   _exportPdf() async {
-    if (!isPro) {
+    if (!localFeaturesEnabled) {
       defaultToast(context, "请先发电鸭");
       return;
     }
@@ -227,7 +227,7 @@ class _DownloadsExportingScreenState extends State<DownloadsExportingScreen> {
   }
 
   _exportCbzsZips() async {
-    if (!isPro) {
+    if (!localFeaturesEnabled) {
       defaultToast(context, "请先发电鸭");
       return;
     }
@@ -272,7 +272,7 @@ class _DownloadsExportingScreenState extends State<DownloadsExportingScreen> {
   }
 
   _exportZips() async {
-    if (!isPro) {
+    if (!localFeaturesEnabled) {
       defaultToast(context, "请先发电鸭");
       return;
     }
@@ -317,7 +317,7 @@ class _DownloadsExportingScreenState extends State<DownloadsExportingScreen> {
   }
 
   _exportJpegZips() async {
-    if (!isPro) {
+    if (!localFeaturesEnabled) {
       defaultToast(context, "请先发电鸭");
       return;
     }
@@ -362,7 +362,7 @@ class _DownloadsExportingScreenState extends State<DownloadsExportingScreen> {
   }
 
   _exportEpubs() async {
-    if (!isPro) {
+    if (!localFeaturesEnabled) {
       defaultToast(context, "请先发电鸭");
       return;
     }

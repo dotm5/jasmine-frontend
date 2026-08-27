@@ -18,7 +18,7 @@ Future<String?> initExportPath() async {
       try {
         _currentExportPath = await methods.androidDefaultExportsDir();
       } catch (e) {
-        _currentExportPath = "/sdcard/Download/jmtt2mic/exports";
+        _currentExportPath = "/sdcard/Download/JasmineLocal/exports";
       }
     } else if (Platform.isMacOS || Platform.isLinux) {
       _currentExportPath = await methods.getHomeDir();

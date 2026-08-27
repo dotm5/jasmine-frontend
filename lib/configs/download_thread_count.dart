@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:jasmine/basic/methods.dart';
 
 import '../basic/commons.dart';
-import 'is_pro.dart';
+import 'local_build.dart';
 
 late int _downloadThreadCount;
 int get downloadThreadCount => _downloadThreadCount;
@@ -19,9 +19,9 @@ Widget downloadThreadCountSetting() {
     builder: (BuildContext context, void Function(void Function()) setState) {
       return ListTile(
         title: Text(
-          "下载线程数" + (!isPro ? "(发电)" : ""),
+          "下载线程数" + (!localFeaturesEnabled ? "(发电)" : ""),
           style: TextStyle(
-            color: !isPro ? Colors.grey : null,
+            color: !localFeaturesEnabled ? Colors.grey : null,
           ),
         ),
         subtitle: Text("$_downloadThreadCount"),
@@ -35,7 +35,7 @@ Widget downloadThreadCountSetting() {
 }
 
 Future chooseDownloadThread(BuildContext context) async {
-  if (!isPro) {
+  if (!localFeaturesEnabled) {
     defaultToast(context, "先发电才能使用多线程嗷");
     return;
   }

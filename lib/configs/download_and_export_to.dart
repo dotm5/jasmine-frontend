@@ -6,7 +6,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../basic/commons.dart';
 import '../basic/methods.dart';
 import 'android_version.dart';
-import 'is_pro.dart';
+import 'local_build.dart';
 
 late String _currentDownloadAndExportTo;
 const _propertyName = "DownloadAndExportTo";
@@ -25,7 +25,7 @@ String currentDownloadAndExportToName() {
 String get currentDownloadAndExportTo => _currentDownloadAndExportTo;
 
 Widget downloadAndExportToSetting() {
-  if (!isPro) {
+  if (!localFeaturesEnabled) {
     return SwitchListTile(
       title: const Text("下载时同时导出", style: TextStyle(color: Colors.grey)),
       subtitle: const Text("发电才能使用", style: TextStyle(color: Colors.grey)),

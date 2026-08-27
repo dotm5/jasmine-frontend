@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../basic/commons.dart';
 import '../basic/methods.dart';
-import 'is_pro.dart';
+import 'local_build.dart';
 
 const _propertyName = "disableRecommendContent";
 late bool _disableRecommendContent;
@@ -12,7 +12,7 @@ final disableRecommendContentEvent = Event();
 Future<void> initDisableRecommendContent() async {
   _disableRecommendContent =
       (await methods.loadProperty(_propertyName)) == "true";
-  if (!isPro) {
+  if (!localFeaturesEnabled) {
     _disableRecommendContent = false;
   }
 }
@@ -26,13 +26,13 @@ Widget disableRecommendContentSetting() {
     builder: (BuildContext context, void Function(void Function()) setState) {
       return SwitchListTile(
         title: Text(
-          "关闭推荐内容" + (!isPro ? "\n(发电后使用)" : ""),
-          style: TextStyle(color: isPro ? null : Colors.grey),
+          "关闭推荐内容" + (!localFeaturesEnabled ? "\n(发电后使用)" : ""),
+          style: TextStyle(color: localFeaturesEnabled ? null : Colors.grey),
         ),
         subtitle: Text(_disableRecommendContent ? "已关闭" : "已开启"),
         value: _disableRecommendContent,
         onChanged: (value) async {
-          if (!isPro) {
+          if (!localFeaturesEnabled) {
             defaultToast(context, "发电才能使用哦~");
             return;
           }

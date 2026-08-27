@@ -16,7 +16,7 @@
     </queries>
 
     <application
-        android:label="jmtt2mic"
+        android:label="Jasmine Local"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:requestLegacyExternalStorage="true">

@@ -3,10 +3,19 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:jasmine/basic/methods.dart';
 
+import 'network_host.dart';
+
 late String _cdnHost;
 
+// Keep the current Rust/downloader IMAGE_DOMAIN as the persisted default;
+// JMcomic3's default remains an additional candidate below.
+const _defaultCdnHost = 'cdn-msp2.jmapiproxy2.cc';
 
 String get currentCdnHostName => _cdnHost;
+
+String normalizeCdnHostCandidate(Object? raw, {String fallback = ''}) {
+  return normalizeNetworkHostCandidate(raw, fallback: fallback);
+}
 
 const _base64List = [
   "Y2RuLW1zcDMuam1kYW5qb25wcm94eS52aXA=",
@@ -20,20 +29,51 @@ const _base64List = [
   "Y2RuLW1zcC5qbWFwaXByb3h5Mi5jYw==",
 ];
 
-var _cdnList = [];
+const _additionalFallbackCdnHosts = <String>[
+  // JMcomic3 network_cdn_host.dart defaultCdnHost.
+  'cdn-msp3.jmapiproxy1.cc',
+];
+
+var _cdnList = <String>[];
 
 Future<void> initCdnHost() async {
-  for (var i = 0; i < _base64List.length; i++) {
-    _cdnList.add(utf8.decode(base64.decode(_base64List[i])));
+  _cdnList = <String>[];
+  _mergeCdnList(<Object?>[
+    _defaultCdnHost,
+    ..._additionalFallbackCdnHosts,
+    ..._base64List.map((e) => utf8.decode(base64.decode(e))),
+  ]);
+  try {
+    final config = await methods.appConfig();
+    final hosts = config['cdnHosts'];
+    if (hosts is Iterable) {
+      _mergeCdnList(hosts.cast<Object?>());
+    }
+  } catch (_) {
+    // The local fallback remains usable when capability discovery is absent.
   }
-  _cdnHost = await methods.loadCdnHost();
+  final rawLoaded = await methods.loadCdnHost();
+  _cdnHost = normalizeCdnHostCandidate(rawLoaded, fallback: _defaultCdnHost);
+  _mergeCdnList(<Object?>[_cdnHost]);
+  if (rawLoaded.trim() != _cdnHost) {
+    await methods.saveCdnHost(_cdnHost);
+  }
+}
+
+void _mergeCdnList(Iterable<Object?> items) {
+  _cdnList = mergeNetworkHostCandidates(<Object?>[..._cdnList, ...items]);
 }
 
 Future chooseCdnHost(BuildContext context) async {
   final choose = await chooseCdnDialog(context);
   if (choose != null) {
-    await methods.saveCdnHost(choose);
-    _cdnHost = choose;
+    final normalized = normalizeCdnHostCandidate(
+      choose,
+      fallback: _defaultCdnHost,
+    );
+    await methods.saveCdnHost(normalized);
+    _cdnHost = normalized;
+    _mergeCdnList(<Object?>[_cdnHost]);
   }
 }
 
@@ -59,30 +99,26 @@ Future<T?> chooseCdnDialog<T>(BuildContext buildContext) async {
       return SimpleDialog(
         title: const Text("图片分流"),
         children: [
-          ..._cdnList
-            .map(
-              (e) => SimpleDialogOption(
-            child: CdnOptionRow(
-              e,
-              key: Key("CDN:${e}"),
+          ..._cdnList.map(
+            (e) => SimpleDialogOption(
+              child: CdnOptionRow(e, key: Key("CDN:${e}")),
+              onPressed: () {
+                Navigator.of(context).pop(e);
+              },
             ),
-            onPressed: () {
-              Navigator.of(context).pop(e);
+          ),
+          SimpleDialogOption(
+            child: const Text("手动输入"),
+            onPressed: () async {
+              Navigator.of(context).pop(await _manualInputApiHost(context));
             },
           ),
-        ),
-            SimpleDialogOption(
-              child: const Text("手动输入"),
-              onPressed: () async {
-                Navigator.of(context).pop(await _manualInputApiHost(context));
-              },
-            ),
-            SimpleDialogOption(
-              child: const Text("取消"),
-              onPressed: () {
-                Navigator.of(context).pop(null);
-              },
-            ),
+          SimpleDialogOption(
+            child: const Text("取消"),
+            onPressed: () {
+              Navigator.of(context).pop(null);
+            },
+          ),
         ],
       );
     },
@@ -100,9 +136,7 @@ Future<String> _manualInputApiHost(BuildContext context) async {
         title: const Text("手动输入CDN地址"),
         content: TextField(
           controller: _controller,
-          decoration: const InputDecoration(
-            hintText: "www.example.com",
-          ),
+          decoration: const InputDecoration(hintText: "www.example.com"),
         ),
         actions: [
           TextButton(
@@ -149,39 +183,21 @@ class _CdnOptionRowState extends State<CdnOptionRow> {
         Expanded(child: Container()),
         FutureBuilder(
           future: _feature,
-          builder: (
-              BuildContext context,
-              AsyncSnapshot<int> snapshot,
-              ) {
+          builder: (BuildContext context, AsyncSnapshot<int> snapshot) {
             if (snapshot.connectionState != ConnectionState.done) {
-              return const PingStatus(
-                "测速中",
-                Colors.blue,
-              );
+              return const PingStatus("测速中", Colors.blue);
             }
             if (snapshot.hasError) {
-              return const PingStatus(
-                "失败",
-                Colors.red,
-              );
+              return const PingStatus("失败", Colors.red);
             }
             int ping = snapshot.requireData;
             if (ping <= 200) {
-              return PingStatus(
-                "${ping}ms",
-                Colors.green,
-              );
+              return PingStatus("${ping}ms", Colors.green);
             }
             if (ping <= 500) {
-              return PingStatus(
-                "${ping}ms",
-                Colors.yellow,
-              );
+              return PingStatus("${ping}ms", Colors.yellow);
             }
-            return PingStatus(
-              "${ping}ms",
-              Colors.orange,
-            );
+            return PingStatus("${ping}ms", Colors.orange);
           },
         ),
       ],
@@ -199,15 +215,9 @@ class PingStatus extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Text(
-          '\u2022',
-          style: TextStyle(
-            color: color,
-          ),
-        ),
+        Text('\u2022', style: TextStyle(color: color)),
         Text(" $title"),
       ],
     );
   }
 }
-

@@ -89,3 +89,6 @@ tmp/
 .tmp/
 .cxx/
 .home/
+.toolchains/
+/dist/
+!/pubspec.lock

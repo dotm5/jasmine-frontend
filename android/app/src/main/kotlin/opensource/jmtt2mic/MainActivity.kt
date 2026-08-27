@@ -29,10 +29,21 @@ class MainActivity : FlutterActivity() {
     private val uiThreadHandler = Handler(Looper.getMainLooper())
     private val pool =
         Executors.newCachedThreadPool { runnable -> Thread(runnable).also { it.isDaemon = true } }
+    private var nativeInitError: String? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
-        // 初始化
-        Jni.init(context.filesDir.absolutePath)
+        super.configureFlutterEngine(flutterEngine)
+        // Surface native/storage failures through Flutter instead of terminating
+        // the activity or misreporting them as a network configuration problem.
+        try {
+            Jni.init(context.filesDir.absolutePath)
+        } catch (e: Exception) {
+            nativeInitError = e.message ?: "Native backend initialization failed"
+            Log.e("JasmineLocal", "Native initialization failed", e)
+        } catch (e: LinkageError) {
+            nativeInitError = "Native library loading failed: ${e.message}"
+            Log.e("JasmineLocal", "Native library loading failed", e)
+        }
         // channel
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "methods").setMethodCallHandler(
             this::methods
@@ -40,14 +51,15 @@ class MainActivity : FlutterActivity() {
         //
         EventChannel(flutterEngine.dartExecutor.binaryMessenger, "volume_button")
             .setStreamHandler(volumeStreamHandler)
-        // super
-        super.configureFlutterEngine(flutterEngine)
     }
 
     private fun methods(call: MethodCall, result: MethodChannel.Result) {
         result.withCoroutine {
             when (call.method) {
-                "invoke" -> Jni.invoke(call.arguments<String>())
+                "invoke" -> {
+                    nativeInitError?.let { throw IllegalStateException(it) }
+                    Jni.invoke(call.arguments<String>() ?: throw IllegalArgumentException("Missing request"))
+                }
                 "saveImageFileToGallery" -> saveImageFileToGallery(call.arguments<String>()!!)
                 "androidGetModes" -> {
                     modes()
@@ -219,7 +231,7 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun defaultJennyDir(): File {
-        return File(downloadsDir(), "jmtt2mic")
+        return File(downloadsDir(), "JasmineLocal")
     }
 
     private fun androidDefaultExportsDir(): File {

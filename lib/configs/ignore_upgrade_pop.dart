@@ -2,14 +2,14 @@ import 'package:flutter/material.dart';
 
 import '../basic/commons.dart';
 import '../basic/methods.dart';
-import 'is_pro.dart';
+import 'local_build.dart';
 
 const _propertyName = "ignoreUpgradePop";
 late bool _ignoreUpgradePop;
 
 Future<void> initIgnoreUpgradePop() async {
   _ignoreUpgradePop = (await methods.loadProperty(_propertyName)) == "true";
-  if (!isPro) {
+  if (!localFeaturesEnabled) {
     _ignoreUpgradePop = false;
   }
 }
@@ -25,18 +25,18 @@ Widget ignoreUpgradePopSetting() {
         title: Text(
           "是否忽略升级弹窗",
           style: TextStyle(
-            color: !isPro ? Colors.grey : null,
+            color: !localFeaturesEnabled ? Colors.grey : null,
           ),
         ),
         subtitle: Text(
           _ignoreUpgradePop ? "是" : "否",
           style: TextStyle(
-            color: !isPro ? Colors.grey : null,
+            color: !localFeaturesEnabled ? Colors.grey : null,
           ),
         ),
         value: _ignoreUpgradePop,
         onChanged: (value) async {
-          if (!isPro) {
+          if (!localFeaturesEnabled) {
             return;
           }
           await methods.saveProperty(_propertyName, "$value");

@@ -1,3 +1,4 @@
+import 'local_build.dart';
 import 'dart:convert';
 
 import 'package:event/event.dart';
@@ -108,7 +109,9 @@ Widget deleteFavoriteFolderItemTile(BuildContext context) {
 Widget renameFavoriteFolderItemTile(BuildContext context) {
   return ListTile(
     title: const Text("重命名收藏文件夹"),
-    onTap: () async {
+    enabled: renameFolderEndpointAvailable,
+    subtitle: renameFolderEndpointAvailable ? null : const Text("待接入上游协议"),
+    onTap: !renameFolderEndpointAvailable ? null : () async {
       if (loginStatus != LoginStatus.loginSuccess) {
         defaultToast(context, "请先登录");
         return;

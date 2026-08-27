@@ -4,8 +4,10 @@ import 'package:jasmine/basic/commons.dart';
 import 'package:jasmine/basic/log.dart';
 import 'package:jasmine/basic/methods.dart';
 import 'package:jasmine/configs/login.dart';
+import 'local_build.dart';
 
 enum DailySignStatus {
+  unavailable,
   unchecked,
   checking,
   signed,
@@ -23,6 +25,8 @@ void _setDailySignStatus(DailySignStatus status) {
 
 String dailySignStatusLabel() {
   switch (dailySignStatus) {
+    case DailySignStatus.unavailable:
+      return "签到待接入";
     case DailySignStatus.checking:
       return "检测中...";
     case DailySignStatus.signed:
@@ -37,6 +41,11 @@ String dailySignStatusLabel() {
 
 Future<void> checkDailySignStatus(BuildContext context,
     {bool toast = false}) async {
+  if (!dailyEndpointAvailable) {
+    _setDailySignStatus(DailySignStatus.unavailable);
+    if (toast) defaultToast(context, "所选上游尚无每日签到的协议实现");
+    return;
+  }
   if (loginStatus != LoginStatus.loginSuccess) {
     _setDailySignStatus(DailySignStatus.unchecked);
     return;

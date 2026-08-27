@@ -1,7 +1,9 @@
 import 'dart:convert';
-import 'dart:io';
+import 'dart:io' show Platform;
 
 import 'package:flutter/services.dart';
+import 'package:jasmine/backend/backend_client.dart';
+import 'package:jasmine/backend/method_channel_backend_transport.dart';
 import 'package:jasmine/basic/comic_seal.dart';
 import 'package:jasmine/basic/log.dart';
 
@@ -9,40 +11,19 @@ import 'entities.dart';
 
 export 'entities.dart';
 
-const methods = Methods._();
+const methods = Methods();
 
 class Methods {
-  const Methods._();
+  const Methods({
+    this.backend = const BackendClient(MethodChannelBackendTransport()),
+  });
 
+  final BackendClient backend;
+  // Device services (gallery, authentication, directories) stay in the frontend.
   static const _channel = MethodChannel("methods");
-  static HttpClient httpClient = HttpClient();
 
-  Future<String> _invoke(String method, dynamic params) async {
-    late String resp;
-    // if (Platform.isLinux) {
-    //   var req = await httpClient.post("127.0.0.1", 52764, "invoke");
-    //   req.add(utf8.encode(jsonEncode({
-    //     "method": method,
-    //     "params": params is String ? params : jsonEncode(params),
-    //   })));
-    //   var rsp = await req.close();
-    //   resp = await rsp.transform(utf8.decoder).join();
-    // } else
-    {
-      resp = await _channel.invokeMethod(
-          "invoke",
-          jsonEncode({
-            "method": method,
-            "params": params is String ? params : jsonEncode(params),
-          }));
-    }
-
-    var response = _Response.fromJson(jsonDecode(resp));
-    if (response.errorMessage.isNotEmpty) {
-      throw StateError(response.errorMessage);
-    }
-    return response.responseData;
-  }
+  Future<String> _invoke(String method, dynamic params) =>
+      backend.invoke(method, params);
 
   Future init() {
     return _invoke("init_dart", "");
@@ -652,15 +633,5 @@ class Methods {
       "type_id": typeId,
       "page": page,
     })));
-  }
-}
-
-class _Response {
-  late String errorMessage;
-  late String responseData;
-
-  _Response.fromJson(Map json) {
-    errorMessage = json["error_message"];
-    responseData = json["response_data"];
   }
 }

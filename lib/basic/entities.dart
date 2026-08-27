@@ -974,7 +974,11 @@ class GamePage {
 
   GamePage.fromJson(Map<String, dynamic> json) {
     games = List.from(json['games']).map((e) => Game.fromJson(e)).toList();
-    gamesTotal = json['games_total'];
+    final total = json['games_total'];
+    if (total is! int && total is! String) {
+      throw const FormatException('games_total must be an integer or string');
+    }
+    gamesTotal = total.toString();
     categories = List.from(json['categories'])
         .map((e) => GameCategory.fromJson(e))
         .toList();
@@ -1072,8 +1076,8 @@ class GameCategory {
   late final String? slug;
 
   GameCategory.fromJson(Map<String, dynamic> json) {
-    name = null;
-    slug = null;
+    name = json['name'];
+    slug = json['slug'];
   }
 
   Map<String, dynamic> toJson() {

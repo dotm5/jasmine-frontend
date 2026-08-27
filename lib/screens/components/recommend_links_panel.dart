@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../basic/commons.dart';
 import '../../configs/disable_recommend_content.dart';
-import '../../configs/is_pro.dart';
+import '../../configs/local_build.dart';
 import '../../configs/recommend_links.dart';
 
 class RecommendLinksPanel extends StatefulWidget {
@@ -42,7 +42,7 @@ class _RecommendLinksPanelState extends State<RecommendLinksPanel> {
     if (links.isEmpty) {
       return const SizedBox.shrink();
     }
-    if (isPro && currentDisableRecommendContent()) {
+    if (localFeaturesEnabled && currentDisableRecommendContent()) {
       return const SizedBox.shrink();
     }
 

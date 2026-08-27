@@ -4,8 +4,7 @@ import 'package:jasmine/configs/login.dart';
 import 'package:jasmine/screens/about_screen.dart';
 import 'package:jasmine/screens/comments_screen.dart';
 import 'package:jasmine/screens/components/avatar.dart';
-import 'package:jasmine/screens/pro_oh_screen.dart';
-import 'package:jasmine/screens/pro_screen.dart';
+import 'package:jasmine/screens/local_build_screen.dart';
 import 'package:jasmine/screens/components/recommend_links_panel.dart';
 import 'package:jasmine/screens/settings_screen.dart';
 import 'package:jasmine/screens/view_log_screen.dart';
@@ -59,11 +58,11 @@ class _UserScreenState extends State<UserScreen>
             onPressed: () {
               Navigator.of(context)
                   .push(MaterialPageRoute(builder: (BuildContext context) {
-                return const ProOhScreen();
+                return const LocalBuildScreen();
               }));
             },
             icon: Icon(
-              isPro ? Icons.offline_bolt : Icons.offline_bolt_outlined,
+              Icons.build_circle_outlined,
             ),
           ),
         if (normalPlatform)
@@ -71,11 +70,11 @@ class _UserScreenState extends State<UserScreen>
             onPressed: () {
               Navigator.of(context)
                   .push(MaterialPageRoute(builder: (BuildContext context) {
-                return const ProScreen();
+                return const LocalBuildScreen();
               }));
             },
             icon: Icon(
-              isPro ? Icons.offline_bolt : Icons.offline_bolt_outlined,
+              Icons.build_circle_outlined,
             ),
           ),
         _buildSettingsIcon(),
@@ -368,11 +367,11 @@ class _UserScreenState extends State<UserScreen>
 
   Widget _buildFdT() {
     return ListTile(
-      title: const Text("发电"),
+      title: const Text("本地构建"),
       onTap: () {
         Navigator.of(context).push(MaterialPageRoute(
           builder: (BuildContext context) {
-            return const ProScreen();
+            return const LocalBuildScreen();
           },
         ));
       },
