@@ -1,58 +1,49 @@
 <div align="center">
-  <h1 align="center">
-    Jasmine 
-
-[![license](https://img.shields.io/github/license/ComicSparks/jasmine)](https://raw.githubusercontent.com/ComicSparks/jasmine/master/LICENSE)
-[![releases](https://img.shields.io/github/v/release/ComicSparks/jasmine)](https://github.com/ComicSparks/jasmine/releases)
-  </h1>
+  <h1>Jasmine</h1>
+  <p>一个简洁易用的漫画浏览与阅读应用。</p>
 </div>
 
-一个简单易用的二次元浏览器，同时支持支持 Android / iOS / MacOS / Windows.
+[English](README.md)
 
+本仓库是 [ComicSparks/jasmine](https://github.com/ComicSparks/jasmine) 的个人分支，
+专注于漫画的发现、阅读与整理。
 
-1. 此APP内容存在限制级别内容(露骨/血腥/暴力)。 
-2. 您在下载使用代码或安装包之前，请务必悉知当地法规，是否允许使用或传播包含上述内容的软件。
-3. 仓库作者不会在除Github以外的地方发布软件的代码或安装包，不对分发代码或软件承担责任。因传播载造成的法律问题或纠纷, 需行为人自行处理。
+## 主要特性
 
-
+- **发现漫画**：按分类浏览、关键词搜索，查看每周精选。
+- **轻松阅读**：切换漫画章节，按自己的习惯调整阅读设置。
+- **整理书架**：收藏喜欢的漫画，用文件夹分类，随时回看浏览记录。
+- **离线阅读**：下载漫画，管理本地下载内容。
+- **社区交流**：查看与发布评论。
+- **个性设置**：切换主题，调整阅读体验。
 
 ## 软件截图
 
-#### 浏览器
+截图来自原项目。
 
-![](images/app_screen.png)
+### 浏览
 
-#### 阅读器
+![漫画浏览界面](images/app_screen.png)
 
-![](images/reader_screen.png)
+### 阅读
 
-## 实现功能
+![漫画阅读界面](images/reader_screen.png)
 
-- [x] 漫画
-  - [x] 漫画分类检索
-  - [x] 阅读漫画
-  - [x] 搜索漫画
-  - [x] 收藏漫画
-  - [x] 浏览记录
-  - [x] 下载漫画
-- [ ] 游戏
-- [x] 社区
-  - [x] 获取评论
-  - [x] 发布评论
-- [x] 用户
-  - [x] 登录/注册
-- [x] 设备优化
-  - [x] 安卓的高刷新率屏幕的支持 
+## 致谢
 
-## 技术架构
+感谢 [ComicSparks/jasmine](https://github.com/ComicSparks/jasmine) 及其贡献者提供原始应用、
+界面设计与截图。
 
-flutter + rust
+## 使用须知
 
-flutter实现了高性能的跨平台界面渲染，rust实现了安全以及高效的业务调度。
+以下保留原项目的内容提示与使用规则。
 
-![](images/technologies.png)
+1. 此APP内容存在限制级别内容(露骨/血腥/暴力)。
+2. 您在下载使用代码或安装包之前，请务必悉知当地法规，是否允许使用或传播包含上述内容的软件。
+3. 仓库作者不会在除Github以外的地方发布软件的代码或安装包，不对分发代码或软件承担责任。因传播载造成的法律问题或纠纷, 需行为人自行处理。
 
-## 请您遵守使用规则
+### 请您遵守使用规则
+
 软件副本分发以及代码使用规则规则
 
 - 本仓库代码供学习交流使用, 个人或企业不可用于商业用途, 不可上架任何商店。
