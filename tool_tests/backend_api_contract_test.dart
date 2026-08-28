@@ -233,7 +233,10 @@ void main() {
     test(
       'album, chapter and nonempty history preserve reading progress',
       () async {
-        expect((await api.album(101)).id, 101);
+        final album = await api.album(101);
+        expect(album.id, 101);
+        expect(album.relatedList.single.id, 202);
+        expect(album.relatedList.single.description, isEmpty);
         expect((await api.chapter(101)).id, 101);
         await api.updateViewLog(101, 101, 4);
         final history = await api.pageViewLog(1);

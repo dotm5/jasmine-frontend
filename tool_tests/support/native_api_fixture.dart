@@ -35,7 +35,15 @@ Map<String, dynamic> albumFixture(int id) => {
   'comment_total': '1',
   'tags': ['fixture'],
   'works': [],
-  'related_list': [],
+  // Compact recommendation payloads omit description on the live API.
+  'related_list': [
+    {
+      'id': '202',
+      'author': 'Fixture author',
+      'name': 'Related fixture',
+      'image': '',
+    },
+  ],
   'liked': false,
   'is_favorite': true,
 };
