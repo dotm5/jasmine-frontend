@@ -7,6 +7,7 @@ import 'package:jasmine/screens/components/floating_search_bar.dart';
 import 'package:jasmine/screens/user_screen.dart';
 
 import 'components/comic_floating_search_bar.dart';
+import 'components/adaptive_app_scaffold.dart';
 
 class AppScreen extends StatefulWidget {
   const AppScreen({Key? key}) : super(key: key);
@@ -28,8 +29,8 @@ class _AppScreenState extends State<AppScreen> {
     const AppScreenData(
       UserScreen(),
       '书架',
-      VersionBadged(child: Icon(Icons.image_outlined)),
-      VersionBadged(child: Icon(Icons.image)),
+      VersionBadged(child: Icon(Icons.bookmarks_outlined)),
+      VersionBadged(child: Icon(Icons.bookmarks)),
     ),
   ];
 
@@ -37,6 +38,7 @@ class _AppScreenState extends State<AppScreen> {
   void initState() {
     super.initState();
     Future.delayed(Duration.zero, () async {
+      if (!mounted) return;
       versionPop(context);
       versionEvent.subscribe(_versionSub);
     });
@@ -60,21 +62,35 @@ class _AppScreenState extends State<AppScreen> {
     setState(() {
       _selectedIndex = index;
     });
-    _pageController.jumpToPage(
-      index,
-    );
+    _pageController.jumpToPage(index);
   }
 
   @override
   Widget build(BuildContext context) {
     return ComicFloatingSearchBarScreen(
       onQuery: (value) {
-        Navigator.of(context).push(MaterialPageRoute(builder: (_) {
-          return ComicSearchScreen(initKeywords: value);
-        }));
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) {
+              return ComicSearchScreen(initKeywords: value);
+            },
+          ),
+        );
       },
       controller: _searchBarController,
-      child: Scaffold(
+      child: AdaptiveAppScaffold(
+        selectedIndex: _selectedIndex,
+        onDestinationSelected: _onItemTapped,
+        destinations:
+            _screens
+                .map(
+                  (e) => NavigationDestination(
+                    icon: e.icon,
+                    selectedIcon: e.activeIcon,
+                    label: e.title,
+                  ),
+                )
+                .toList(),
         body: PageView(
           physics: const NeverScrollableScrollPhysics(),
           allowImplicitScrolling: false,
@@ -85,17 +101,6 @@ class _AppScreenState extends State<AppScreen> {
             });
           },
           children: _screens.map((e) => e.screen).toList(),
-        ),
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: _selectedIndex,
-          onDestinationSelected: _onItemTapped,
-          destinations: _screens
-              .map((e) => NavigationDestination(
-                    icon: e.icon,
-                    selectedIcon: e.activeIcon,
-                    label: e.title,
-                  ))
-              .toList(),
         ),
       ),
     );

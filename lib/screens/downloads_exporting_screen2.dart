@@ -22,7 +22,7 @@ class DownloadsExportingScreen2 extends StatefulWidget {
   final List<int> idList;
 
   const DownloadsExportingScreen2({Key? key, required this.idList})
-      : super(key: key);
+    : super(key: key);
 
   @override
   State<StatefulWidget> createState() => _DownloadsExportingScreen2State();
@@ -88,9 +88,7 @@ class _DownloadsExportingScreen2State extends State<DownloadsExportingScreen2> {
           onPressed: _exportJpegs,
           child: Text(
             "导出成文件夹" + (!localFeaturesEnabled ? "\n(发电后使用)" : ""),
-            style: TextStyle(
-              color: !localFeaturesEnabled ? Colors.grey : null,
-            ),
+            style: TextStyle(color: !localFeaturesEnabled ? Colors.grey : null),
             textAlign: TextAlign.center,
           ),
         ),
@@ -99,9 +97,7 @@ class _DownloadsExportingScreen2State extends State<DownloadsExportingScreen2> {
           onPressed: _exportPdf2,
           child: Text(
             "导出成PDF" + (!localFeaturesEnabled ? "\n(发电后使用)" : ""),
-            style: TextStyle(
-              color: !localFeaturesEnabled ? Colors.grey : null,
-            ),
+            style: TextStyle(color: !localFeaturesEnabled ? Colors.grey : null),
             textAlign: TextAlign.center,
           ),
         ),
@@ -110,9 +106,7 @@ class _DownloadsExportingScreen2State extends State<DownloadsExportingScreen2> {
           onPressed: _exportEpub,
           child: Text(
             "导出成EPUB" + (!localFeaturesEnabled ? "\n(发电后使用)" : ""),
-            style: TextStyle(
-              color: !localFeaturesEnabled ? Colors.grey : null,
-            ),
+            style: TextStyle(color: !localFeaturesEnabled ? Colors.grey : null),
             textAlign: TextAlign.center,
           ),
         ),
@@ -128,9 +122,10 @@ class _DownloadsExportingScreen2State extends State<DownloadsExportingScreen2> {
     }
     late String? path;
     try {
-      path = Platform.isIOS
-          ? await methods.iosGetDocumentDir()
-          : await chooseFolder(context);
+      path =
+          Platform.isIOS
+              ? await methods.iosGetDocumentDir()
+              : await chooseFolder(context);
     } catch (e) {
       defaultToast(context, "$e");
       return;
@@ -141,11 +136,7 @@ class _DownloadsExportingScreen2State extends State<DownloadsExportingScreen2> {
         setState(() {
           exporting = true;
         });
-        await methods.export_jm_jpegs(
-          widget.idList,
-          path,
-          deleteExport,
-        );
+        await methods.export_jm_jpegs(widget.idList, path, deleteExport);
         exported = true;
       } catch (err) {
         e = err;
@@ -165,9 +156,10 @@ class _DownloadsExportingScreen2State extends State<DownloadsExportingScreen2> {
     }
     late String? path;
     try {
-      path = Platform.isIOS
-          ? await methods.iosGetDocumentDir()
-          : await chooseFolder(context);
+      path =
+          Platform.isIOS
+              ? await methods.iosGetDocumentDir()
+              : await chooseFolder(context);
     } catch (e) {
       defaultToast(context, "$e");
       return;
@@ -179,11 +171,7 @@ class _DownloadsExportingScreen2State extends State<DownloadsExportingScreen2> {
           exporting = true;
         });
         for (var id in widget.idList) {
-          await methods.export_jm_pdf2(
-            id,
-            path,
-            deleteExport,
-          );
+          await methods.export_jm_pdf2(id, path, deleteExport);
         }
         exported = true;
       } catch (err) {
@@ -204,9 +192,10 @@ class _DownloadsExportingScreen2State extends State<DownloadsExportingScreen2> {
     }
     late String? path;
     try {
-      path = Platform.isIOS
-          ? await methods.iosGetDocumentDir()
-          : await chooseFolder(context);
+      path =
+          Platform.isIOS
+              ? await methods.iosGetDocumentDir()
+              : await chooseFolder(context);
     } catch (e) {
       defaultToast(context, "$e");
       return;
@@ -217,11 +206,7 @@ class _DownloadsExportingScreen2State extends State<DownloadsExportingScreen2> {
         setState(() {
           exporting = true;
         });
-        await methods.export_jm_epub(
-          widget.idList,
-          path,
-          deleteExport,
-        );
+        await methods.export_jm_epub(widget.idList, path, deleteExport);
         exported = true;
       } catch (err) {
         e = err;
@@ -244,19 +229,16 @@ class _DownloadsExportingScreen2State extends State<DownloadsExportingScreen2> {
   }
 
   Widget buildScreen(BuildContext context) {
-    return WillPopScope(
+    return PopScope<void>(
+      canPop: !exporting,
       child: Scaffold(
-        appBar: AppBar(
-          title: const Text("批量导出(即使没有下载完)"),
-        ),
+        appBar: AppBar(title: const Text("批量导出(即使没有下载完)")),
         body: _body(),
       ),
-      onWillPop: () async {
-        if (exporting) {
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && exporting) {
           defaultToast(context, "导出中, 请稍后");
-          return false;
         }
-        return true;
       },
     );
   }

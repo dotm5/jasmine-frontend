@@ -13,14 +13,15 @@ import '../basic/platform.dart';
 import '../configs/daily_sign.dart';
 import '../configs/is_pro.dart';
 import 'components/badge.dart';
+import 'components/expressive_action_card.dart';
 import 'downloads_screen.dart';
 import 'favorites_screen.dart';
 
 class UserScreen extends StatefulWidget {
-  const UserScreen({Key? key}) : super(key: key);
+  const UserScreen({super.key});
 
   @override
-  State<StatefulWidget> createState() => _UserScreenState();
+  State<UserScreen> createState() => _UserScreenState();
 }
 
 class _UserScreenState extends State<UserScreen>
@@ -30,10 +31,10 @@ class _UserScreenState extends State<UserScreen>
 
   @override
   void initState() {
+    super.initState();
     loginEvent.subscribe(_setState);
     proEvent.subscribe(_setState);
     dailySignEvent.subscribe(_setState);
-    super.initState();
   }
 
   @override
@@ -45,364 +46,267 @@ class _UserScreenState extends State<UserScreen>
   }
 
   void _setState(_) {
-    setState(() {});
+    if (mounted) setState(() {});
+  }
+
+  void _open(Widget screen) {
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
   }
 
   @override
   Widget build(BuildContext context) {
     super.build(context);
     return Scaffold(
-      appBar: AppBar(title: const Text("个人中心"), actions: [
-        if (!normalPlatform)
+      appBar: AppBar(
+        title: const Text('书架'),
+        actions: [
           IconButton(
-            onPressed: () {
-              Navigator.of(context)
-                  .push(MaterialPageRoute(builder: (BuildContext context) {
-                return const LocalBuildScreen();
-              }));
-            },
-            icon: Icon(
-              Icons.build_circle_outlined,
-            ),
+            tooltip: '功能与说明',
+            onPressed: () => _open(const LocalBuildScreen()),
+            icon: const Icon(Icons.help_outline),
           ),
-        if (normalPlatform)
           IconButton(
-            onPressed: () {
-              Navigator.of(context)
-                  .push(MaterialPageRoute(builder: (BuildContext context) {
-                return const LocalBuildScreen();
-              }));
-            },
-            icon: Icon(
-              Icons.build_circle_outlined,
-            ),
+            tooltip: '设置',
+            onPressed: () => _open(const SettingsScreen()),
+            icon: const Icon(Icons.settings_outlined),
           ),
-        _buildSettingsIcon(),
-        if (normalPlatform) _buildAboutIcon(),
-      ]),
+          if (normalPlatform)
+            IconButton(
+              tooltip: '关于 Jasmine',
+              onPressed: () => _open(const AboutScreen()),
+              icon: const VersionBadged(
+                child: Padding(
+                  padding: EdgeInsets.all(1),
+                  child: Icon(Icons.info_outlined),
+                ),
+              ),
+            ),
+        ],
+      ),
       body: SafeArea(
-        child: ListView(
-          children: [
-            _buildCard(),
-            const Divider(),
-            _buildFavorites(),
-            const Divider(),
-            _buildViewLog(),
-            const Divider(),
-            _buildDownloads(),
-            const Divider(),
-            _buildComments(),
-            const Divider(),
-            const RecommendLinksPanel(
-              padding: EdgeInsets.fromLTRB(16, 0, 16, 0),
-            ),
-            // _buildFdT(),
-            // const Divider(),
-            // _buildSettingsT(),
-            // const Divider(),
-            // _buildAboutT(),
-            // const Divider(),
-            Container(height: 30),
-          ],
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final wide = constraints.maxWidth >= 840;
+            return Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1200),
+                child: ListView(
+                  padding: EdgeInsets.all(wide ? 24 : 16),
+                  children: [
+                    if (wide)
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SizedBox(width: 320, child: _buildAccountCard()),
+                          const SizedBox(width: 24),
+                          Expanded(child: _buildReadingEntries()),
+                        ],
+                      )
+                    else ...[
+                      _buildAccountCard(),
+                      const SizedBox(height: 24),
+                      _buildReadingEntries(),
+                    ],
+                    const SizedBox(height: 24),
+                    const RecommendLinksPanel(padding: EdgeInsets.zero),
+                  ],
+                ),
+              ),
+            );
+          },
         ),
       ),
     );
   }
 
-  Widget _buildCard() {
-    late Widget child;
+  Widget _buildReadingEntries() {
+    final entries = [
+      ExpressiveActionCard(
+        icon: Icons.bookmarks_rounded,
+        title: '收藏夹',
+        subtitle: '整理收藏，管理文件夹',
+        onTap: () {
+          if (loginStatus == LoginStatus.loginSuccess) {
+            _open(const FavoritesScreen());
+          } else {
+            defaultToast(context, '登录后即可使用收藏夹');
+          }
+        },
+      ),
+      ExpressiveActionCard(
+        icon: Icons.history_rounded,
+        title: '浏览历史',
+        subtitle: '找回最近浏览的漫画',
+        onTap: () => _open(const ViewLogScreen()),
+      ),
+      ExpressiveActionCard(
+        icon: Icons.download_rounded,
+        title: '下载管理',
+        subtitle: '查看进度，阅读已下载内容',
+        secondary: true,
+        onTap: () => _open(const DownloadsScreen()),
+      ),
+      ExpressiveActionCard(
+        icon: Icons.forum_rounded,
+        title: '讨论区',
+        subtitle: '浏览留言，参与交流',
+        secondary: true,
+        onTap: () => _open(const CommentsScreen()),
+      ),
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 8, bottom: 16),
+          child: Text(
+            '我的阅读',
+            style: Theme.of(
+              context,
+            ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
+          ),
+        ),
+        for (var i = 0; i < entries.length; i++) ...[
+          entries[i],
+          if (i != entries.length - 1) const SizedBox(height: 8),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildAccountCard() {
+    final scheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme.apply(
+      bodyColor: scheme.onPrimaryContainer,
+      displayColor: scheme.onPrimaryContainer,
+    );
+    Widget child;
     switch (loginStatus) {
       case LoginStatus.notSet:
         child = Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _buildLoginButton("登录 / 注册"),
+            Icon(
+              Icons.account_circle_outlined,
+              size: 48,
+              color: scheme.onPrimaryContainer,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              '让喜欢的漫画有个归处',
+              textAlign: TextAlign.center,
+              style: textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
             const SizedBox(height: 8),
+            Text(
+              '登录后可管理收藏夹和每日签到',
+              textAlign: TextAlign.center,
+              style: textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 20),
+            FilledButton.icon(
+              onPressed: () => loginDialog(context),
+              icon: const Icon(Icons.login),
+              label: const Text('登录 / 注册'),
+            ),
           ],
         );
         break;
       case LoginStatus.logging:
-        child = _buildLoginLoading();
+        child = const Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox.square(
+              dimension: 32,
+              child: CircularProgressIndicator(strokeWidth: 3),
+            ),
+            SizedBox(height: 16),
+            Text('正在登录…'),
+          ],
+        );
         break;
       case LoginStatus.loginSuccess:
-        child = _buildSelfInfoCard();
+        child = Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Avatar(selfInfo.photo),
+            const SizedBox(height: 12),
+            Text(
+              selfInfo.username,
+              textAlign: TextAlign.center,
+              style: textTheme.titleLarge,
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: scheme.onPrimaryContainer,
+                side: BorderSide(color: scheme.onPrimaryContainer),
+              ),
+              onPressed:
+                  dailySignStatus == DailySignStatus.checking
+                      ? null
+                      : () => checkDailySignStatus(context, toast: true),
+              icon: Icon(
+                dailySignStatus == DailySignStatus.signed
+                    ? Icons.check_circle_outline
+                    : Icons.event_available_outlined,
+              ),
+              label: Text(dailySignStatusLabel()),
+            ),
+          ],
+        );
         break;
       case LoginStatus.loginField:
         child = Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _buildLoginButton("登录失败/点击重试"),
+            Icon(Icons.person_off_outlined, size: 40, color: scheme.error),
+            const SizedBox(height: 12),
+            Text('登录未完成', style: textTheme.titleMedium),
             const SizedBox(height: 8),
-            const SizedBox(height: 10),
-            _buildLoginErrorButton(),
+            const Text('请检查网络或账号信息后重试', textAlign: TextAlign.center),
+            const SizedBox(height: 16),
+            FilledButton(
+              onPressed: () => loginDialog(context),
+              child: const Text('重新登录'),
+            ),
+            TextButton(
+              style: TextButton.styleFrom(
+                foregroundColor: scheme.onPrimaryContainer,
+              ),
+              onPressed:
+                  () => showDialog<void>(
+                    context: context,
+                    builder:
+                        (context) => AlertDialog(
+                          title: const Text('登录错误详情'),
+                          content: SingleChildScrollView(
+                            child: SelectableText(loginMessage),
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.of(context).pop(),
+                              child: const Text('关闭'),
+                            ),
+                          ],
+                        ),
+                  ),
+              child: const Text('查看错误详情'),
+            ),
           ],
         );
         break;
     }
-    return Container(
-      height: 200,
-      color: Theme.of(context).brightness == Brightness.light
-          ? Colors.grey.shade200
-          : Colors.grey.shade800,
-      child: Center(
-        child: child,
+    return Card(
+      margin: EdgeInsets.zero,
+      elevation: 0,
+      color: scheme.primaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
+        child: DefaultTextStyle(style: textTheme.bodyMedium!, child: child),
       ),
-    );
-  }
-
-  Widget _buildLoginButton(String title) {
-    return MaterialButton(
-      onPressed: () async {
-        await loginDialog(context);
-      },
-      child: Container(
-        padding: const EdgeInsets.only(left: 15, right: 15, top: 8, bottom: 8),
-        decoration: BoxDecoration(
-          color: Colors.orange.shade700,
-          border: Border.all(
-            color: Colors.black,
-            style: BorderStyle.solid,
-            width: .5,
-          ),
-          borderRadius: const BorderRadius.all(Radius.circular(4)),
-        ),
-        child: Text(
-          title,
-          style: const TextStyle(
-            fontSize: 16,
-            color: Colors.white,
-            fontWeight: FontWeight.normal,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildLoginLoading() {
-    return LayoutBuilder(
-      builder: (BuildContext context, BoxConstraints constraints) {
-        final size = constraints.maxWidth < constraints.maxHeight
-            ? constraints.maxWidth
-            : constraints.maxHeight;
-        return Icon(Icons.refresh,
-            size: size * .5, color: Colors.white.withOpacity(.5));
-      },
-    );
-  }
-
-  Widget _buildLoginErrorButton() {
-    return MaterialButton(
-      onPressed: () async {
-        await showDialog(
-          context: context,
-          builder: (BuildContext context) {
-            return AlertDialog(
-              title: const Text("登录失败"),
-              content: SelectableText(loginMessage),
-              actions: [
-                MaterialButton(
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                  },
-                  child: const Text("确认"),
-                ),
-              ],
-            );
-          },
-        );
-      },
-      child: Container(
-        padding: const EdgeInsets.only(left: 15, right: 15, top: 8, bottom: 8),
-        decoration: BoxDecoration(
-          color: Colors.red.shade700,
-          border: Border.all(
-            color: Colors.black,
-            style: BorderStyle.solid,
-            width: .5,
-          ),
-          borderRadius: const BorderRadius.all(Radius.circular(4)),
-        ),
-        child: const Text(
-          "查看错误",
-          style: TextStyle(
-            fontSize: 16,
-            color: Colors.white,
-            fontWeight: FontWeight.normal,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSelfInfoCard() {
-    final brightness = Theme.of(context).brightness;
-    final statusColor =
-        brightness == Brightness.light ? Colors.black54 : Colors.white70;
-    final statusStyle =
-        (Theme.of(context).textTheme.bodySmall ?? const TextStyle())
-            .copyWith(fontSize: 12, color: statusColor);
-    return Column(
-      children: [
-        Expanded(child: Container()),
-        Center(
-          child: Avatar(selfInfo.photo),
-        ),
-        Container(height: 10),
-        Center(
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                selfInfo.username,
-                style: TextStyle(
-                  color: brightness == Brightness.light
-                      ? Colors.black87
-                      : Colors.white,
-                ),
-              ),
-              const SizedBox(width: 6),
-              GestureDetector(
-                onTap: () async {
-                  await checkDailySignStatus(context, toast: true);
-                },
-                child: Text(
-                  dailySignStatusLabel(),
-                  style: statusStyle,
-                ),
-              ),
-            ],
-          ),
-        ),
-        Expanded(child: Container()),
-      ],
-    );
-  }
-
-  Widget _buildFavorites() {
-    return ListTile(
-      onTap: () async {
-        if (LoginStatus.loginSuccess == loginStatus) {
-          Navigator.of(context).push(MaterialPageRoute(
-            builder: (BuildContext context) {
-              return const FavoritesScreen();
-            },
-          ));
-        } else {
-          defaultToast(context, "登录之后才能使用收藏夹喔");
-        }
-      },
-      title: const Text("收藏夹"),
-    );
-  }
-
-  Widget _buildViewLog() {
-    return ListTile(
-      onTap: () async {
-        Navigator.of(context).push(MaterialPageRoute(
-          builder: (BuildContext context) {
-            return const ViewLogScreen();
-          },
-        ));
-      },
-      title: const Text("浏览记录"),
-    );
-  }
-
-  Widget _buildDownloads() {
-    return ListTile(
-      onTap: () async {
-        Navigator.of(context).push(MaterialPageRoute(
-          builder: (BuildContext context) {
-            return const DownloadsScreen();
-          },
-        ));
-      },
-      title: const Text("下载列表"),
-    );
-  }
-
-  Widget _buildComments() {
-    return ListTile(
-      onTap: () async {
-        Navigator.of(context).push(MaterialPageRoute(
-          builder: (BuildContext context) {
-            return const CommentsScreen();
-          },
-        ));
-      },
-      title: const Text("讨论区"),
-    );
-  }
-
-  Widget _buildSettingsIcon() {
-    return IconButton(
-      onPressed: () async {
-        Navigator.of(context).push(MaterialPageRoute(
-          builder: (BuildContext context) {
-            return const SettingsScreen();
-          },
-        ));
-      },
-      icon: const Icon(Icons.settings),
-    );
-  }
-
-  Widget _buildAboutIcon() {
-    return IconButton(
-      onPressed: () async {
-        Navigator.of(context).push(MaterialPageRoute(
-          builder: (BuildContext context) {
-            return const AboutScreen();
-          },
-        ));
-      },
-      icon: const VersionBadged(
-        child: Padding(
-          padding: EdgeInsets.all(1),
-          child: Icon(Icons.info_outlined),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFdT() {
-    return ListTile(
-      title: const Text("本地构建"),
-      onTap: () {
-        Navigator.of(context).push(MaterialPageRoute(
-          builder: (BuildContext context) {
-            return const LocalBuildScreen();
-          },
-        ));
-      },
-    );
-  }
-
-  Widget _buildSettingsT() {
-    return ListTile(
-      title: const Text("设置"),
-      onTap: () {
-        Navigator.of(context).push(MaterialPageRoute(
-          builder: (BuildContext context) {
-            return const SettingsScreen();
-          },
-        ));
-      },
-    );
-  }
-
-  Widget _buildAboutT() {
-    return ListTile(
-      title: const VersionBadged(
-        child: Text("关于"),
-      ),
-      onTap: () {
-        Navigator.of(context).push(MaterialPageRoute(
-          builder: (BuildContext context) {
-            return const AboutScreen();
-          },
-        ));
-      },
     );
   }
 }

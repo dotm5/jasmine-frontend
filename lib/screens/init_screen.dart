@@ -10,6 +10,7 @@ import 'package:jasmine/configs/login.dart';
 
 import '../basic/web_dav_sync.dart';
 import 'app_screen.dart';
+import 'components/content_loading.dart';
 import 'first_login_screen.dart';
 import 'network_setting_screen.dart';
 
@@ -73,7 +74,7 @@ class _InitScreenState extends State<InitScreen> {
                   height: MediaQuery.of(context).size.height,
                 ),
               )
-              : const Center(child: Text("initializing...")),
+              : const ContentLoading(label: '正在准备书架…'),
     );
   }
 

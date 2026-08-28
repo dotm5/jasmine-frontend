@@ -20,10 +20,18 @@ class Jenny extends StatefulWidget {
   State<StatefulWidget> createState() => _JennyState();
 }
 
-class _JennyState extends State<Jenny> {
+class _JennyState extends State<Jenny> with WidgetsBindingObserver {
+  late bool _reduceMotion;
 
   @override
   void initState() {
+    _reduceMotion =
+        WidgetsBinding
+            .instance
+            .platformDispatcher
+            .accessibilityFeatures
+            .disableAnimations;
+    WidgetsBinding.instance.addObserver(this);
     onDesktopStart();
     themeEvent.subscribe(_setState);
     super.initState();
@@ -31,14 +39,27 @@ class _JennyState extends State<Jenny> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     onDesktopStop();
     themeEvent.unsubscribe(_setState);
     super.dispose();
   }
 
+  @override
+  void didChangeAccessibilityFeatures() {
+    final value =
+        WidgetsBinding
+            .instance
+            .platformDispatcher
+            .accessibilityFeatures
+            .disableAnimations;
+    if (value != _reduceMotion) setState(() => _reduceMotion = value);
+  }
+
   _setState(_) {
     setState(() => {});
   }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -47,6 +68,11 @@ class _JennyState extends State<Jenny> {
       debugShowCheckedModeBanner: false,
       theme: lightTheme,
       darkTheme: darkTheme,
+      highContrastTheme: highContrastLightTheme,
+      highContrastDarkTheme: highContrastDarkTheme,
+      themeAnimationDuration:
+          _reduceMotion ? Duration.zero : const Duration(milliseconds: 500),
+      themeAnimationCurve: Curves.easeInOutCubicEmphasized,
       navigatorObservers: [routeObserver],
       builder: (BuildContext context, Widget? child) {
         Widget built = child ?? Container();
@@ -68,7 +94,19 @@ class _JennyState extends State<Jenny> {
             child: built,
           );
         }
-        return built;
+        final dark = Theme.of(context).brightness == Brightness.dark;
+        return AnnotatedRegion<SystemUiOverlayStyle>(
+          value: SystemUiOverlayStyle(
+            statusBarColor: Colors.transparent,
+            systemNavigationBarColor: Colors.transparent,
+            systemNavigationBarDividerColor: Colors.transparent,
+            statusBarIconBrightness: dark ? Brightness.light : Brightness.dark,
+            systemNavigationBarIconBrightness:
+                dark ? Brightness.light : Brightness.dark,
+            systemNavigationBarContrastEnforced: true,
+          ),
+          child: built,
+        );
       },
       home: const InitScreen(),
     );

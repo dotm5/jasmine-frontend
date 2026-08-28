@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 class FloatingSearchBarScreen extends StatefulWidget {
   final FloatingSearchBarController controller;
@@ -17,250 +18,201 @@ class FloatingSearchBarScreen extends StatefulWidget {
     this.autocorrect = true,
     this.onSubmitted,
     this.panel,
-    Key? key,
-  }) : super(key: key);
+    super.key,
+  });
 
   @override
-  State<StatefulWidget> createState() => _FloatingSearchBarScreenState();
+  State<FloatingSearchBarScreen> createState() =>
+      _FloatingSearchBarScreenState();
 }
 
 class _FloatingSearchBarScreenState extends State<FloatingSearchBarScreen>
     with SingleTickerProviderStateMixin {
   final _node = FocusNode();
-  late final TextEditingController _textEditingController =
-      TextEditingController();
-  late final AnimationController _animationController = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 300),
-  );
-  late final _in = Tween(begin: 0.0, end: 1.0).animate(_animationController);
+  final _textEditingController = TextEditingController();
+  late final AnimationController _animationController;
+  late final CurvedAnimation _animation;
+  bool _visible = false;
 
   @override
   void initState() {
-    widget.controller._state = this;
     super.initState();
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 350),
+    )..addStatusListener(_onAnimationStatus);
+    _animation = CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeInOutCubicEmphasized,
+    );
+    widget.controller._state = this;
+  }
+
+  @override
+  void didUpdateWidget(covariant FloatingSearchBarScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller._state = null;
+      widget.controller._state = this;
+    }
+  }
+
+  void _onAnimationStatus(AnimationStatus status) {
+    if (status == AnimationStatus.dismissed && mounted && _visible) {
+      setState(() => _visible = false);
+    }
   }
 
   @override
   void dispose() {
+    widget.controller._state = null;
     _node.dispose();
     _textEditingController.dispose();
+    _animation.dispose();
     _animationController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Stack(
-        children: [
-          widget.child,
-          ..._animationController.isDismissed
-              ? []
-              : [
-                  _buildBackdrop(),
-                  _buildSearchBar(),
-                  _buildOnPop(),
-                ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildOnPop() {
-    return WillPopScope(
-      onWillPop: () async {
-        if (_animationController.isDismissed) {
-          return true;
-        }
-        _animationController.reverse();
-        return false;
+    final scheme = Theme.of(context).colorScheme;
+    return PopScope<void>(
+      canPop: !_visible,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && _visible) _hideSearchBar();
       },
-      child: Container(),
-    );
-  }
-
-  Widget _buildBackdrop() {
-    return LayoutBuilder(
-      builder: (BuildContext context, BoxConstraints constraints) {
-        return AnimatedBuilder(
-          animation: _in,
-          builder: (BuildContext context, Widget? child) {
-            if (_in.value > 0) {
-              return GestureDetector(
-                onTap: () {
-                  _hideSearchBar();
-                },
-                child: Container(
-                  width: constraints.maxWidth,
-                  height: constraints.maxHeight,
-                  color: Colors.black.withOpacity(.3 * _in.value),
+      child: CallbackShortcuts(
+        bindings: {
+          const SingleActivator(LogicalKeyboardKey.escape): _hideSearchBar,
+        },
+        child: Scaffold(
+          body: Stack(
+            children: [
+              widget.child,
+              if (_visible) ...[
+                FadeTransition(
+                  opacity: _animation,
+                  child: ModalBarrier(
+                    color: scheme.scrim.withValues(alpha: .32),
+                    onDismiss: _hideSearchBar,
+                    semanticsLabel: '关闭搜索',
+                  ),
                 ),
-              );
-            }
-            return Container();
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildSearchBar() {
-    final mq = MediaQuery.of(context);
-    double statusBarHeight = mq.padding.top;
-    double finalHeight = 80 + statusBarHeight;
-    return AnimatedBuilder(
-      animation: _in,
-      builder: (BuildContext context, Widget? child) {
-        return Column(
-          children: [
-            Container(
-              padding: EdgeInsets.only(top: statusBarHeight),
-              child: Transform.translate(
-                offset: Offset(0, (_in.value * finalHeight) - finalHeight),
-                child: Column(
-                  children: [
-                    _SearchBarContainer(
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          IconButton(
-                            onPressed: _hideSearchBar,
-                            icon: Icon(
-                              Icons.arrow_back,
-                              color: Colors.grey.shade800,
-                            ),
-                          ),
-                          Expanded(child: _buildTextField()),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            ...(widget.panel == null
-                ? []
-                : [
-                    Expanded(
-                      child: Transform.translate(
-                        offset: Offset(
-                          (_in.value * mq.size.width) - mq.size.width,
-                          0,
-                        ),
-                        child: Container(
-                          margin: const EdgeInsets.only(
-                            top: 5,
-                            left: 10,
-                            right: 10,
-                            bottom: 15,
-                          ),
-                          decoration: BoxDecoration(
-                            border: Border.all(
-                              color: Colors.grey.shade500.withOpacity(.3),
-                              width: .1,
-                            ),
-                            color: Theme.of(context).scaffoldBackgroundColor,
-                            boxShadow: [
-                              BoxShadow(
-                                blurRadius: .2,
-                                spreadRadius: .3,
-                                color: Colors.grey.shade500.withOpacity(.3),
+                SafeArea(
+                  child: Align(
+                    alignment: Alignment.topCenter,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 720),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: FadeTransition(
+                          opacity: _animation,
+                          child: SlideTransition(
+                            position: Tween(
+                              begin: const Offset(0, -.04),
+                              end: Offset.zero,
+                            ).animate(_animation),
+                            child: FocusScope(
+                              autofocus: true,
+                              child: Column(
+                                children: [
+                                  Material(
+                                    color: scheme.surfaceContainerHigh,
+                                    borderRadius: BorderRadius.circular(28),
+                                    clipBehavior: Clip.antiAlias,
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(8),
+                                      child: Row(
+                                        children: [
+                                          IconButton(
+                                            tooltip: '关闭搜索',
+                                            onPressed: _hideSearchBar,
+                                            icon: const Icon(Icons.arrow_back),
+                                          ),
+                                          Expanded(
+                                            child: TextField(
+                                              controller:
+                                                  _textEditingController,
+                                              focusNode: _node,
+                                              showCursor: widget.showCursor,
+                                              autocorrect: widget.autocorrect,
+                                              textInputAction:
+                                                  TextInputAction.search,
+                                              onSubmitted: widget.onSubmitted,
+                                              decoration: InputDecoration(
+                                                hintText: widget.hint ?? '搜索漫画',
+                                                filled: false,
+                                                border: InputBorder.none,
+                                                enabledBorder: InputBorder.none,
+                                                focusedBorder: InputBorder.none,
+                                                contentPadding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 12,
+                                                    ),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                  if (widget.panel != null) ...[
+                                    const SizedBox(height: 12),
+                                    Expanded(
+                                      child: Material(
+                                        color: scheme.surfaceContainerLow,
+                                        borderRadius: BorderRadius.circular(28),
+                                        clipBehavior: Clip.antiAlias,
+                                        child: widget.panel,
+                                      ),
+                                    ),
+                                  ],
+                                ],
                               ),
-                            ],
-                            borderRadius: BorderRadius.circular(5),
+                            ),
                           ),
-                          child: widget.panel,
                         ),
                       ),
                     ),
-                  ]),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _buildTextField() {
-    return TextField(
-      controller: _textEditingController,
-      showCursor: widget.showCursor,
-      scrollPadding: EdgeInsets.zero,
-      scrollPhysics: const NeverScrollableScrollPhysics(),
-      focusNode: _node,
-      maxLines: 1,
-      autofocus: false,
-      autocorrect: widget.autocorrect,
-      //cursorColor: style.accentColor,
-      //style: style.queryStyle,
-      // textInputAction: widget.textInputAction,
-      // keyboardType: widget.textInputType,
-      onSubmitted: widget.onSubmitted,
-      decoration: InputDecoration(
-        isDense: true,
-        hintText: widget.hint ?? "搜索",
-        // hintStyle: style.hintStyle,
-        contentPadding: EdgeInsets.zero,
-        border: InputBorder.none,
-        errorBorder: InputBorder.none,
-        enabledBorder: InputBorder.none,
-        focusedBorder: InputBorder.none,
-        disabledBorder: InputBorder.none,
-        focusedErrorBorder: InputBorder.none,
-        fillColor: Colors.transparent,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }
 
   void _displayFloatingSearchBar({String? modifyInput}) {
-    if (modifyInput != null) {
-      _textEditingController.text = modifyInput;
+    if (modifyInput != null) _textEditingController.text = modifyInput;
+    setState(() => _visible = true);
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _animationController.value = 1;
+    } else {
+      _animationController.forward();
     }
-    _node.requestFocus();
-    _animationController.forward();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _visible) _node.requestFocus();
+    });
   }
 
   void _hideSearchBar() {
+    if (!_visible) return;
     _node.unfocus();
-    _animationController.reverse();
-  }
-}
-
-class _SearchBarContainer extends StatelessWidget {
-  final Widget child;
-
-  const _SearchBarContainer({Key? key, required this.child}) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(8, 5, 8, 5),
-      height: 50,
-      decoration: BoxDecoration(
-        border: Border.all(
-          color: Colors.grey.shade500.withOpacity(.3),
-          width: .1,
-        ),
-        color: Theme.of(context).scaffoldBackgroundColor,
-        boxShadow: [
-          BoxShadow(
-            blurRadius: .2,
-            spreadRadius: .3,
-            color: Colors.grey.shade500.withOpacity(.3),
-          ),
-        ],
-        borderRadius: BorderRadius.circular(5),
-      ),
-      child: child,
-    );
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _animationController.value = 0;
+      if (_visible) setState(() => _visible = false);
+    } else {
+      _animationController.reverse();
+    }
   }
 }
 
 class FloatingSearchBarController {
   _FloatingSearchBarScreenState? _state;
-
   void hide() => _state?._hideSearchBar();
-
   void display({String? modifyInput}) =>
       _state?._displayFloatingSearchBar(modifyInput: modifyInput);
 }

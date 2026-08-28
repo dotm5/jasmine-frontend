@@ -51,7 +51,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
   Widget buildScreen(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("下载"),
+        title: const Text("下载管理"),
         actions: [
           threadCountButton(),
           exportButton(),
@@ -71,7 +71,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
     );
   }
 
-  Widget _body(){
+  Widget _body() {
     if (_loading && _downloads.isEmpty) {
       return const ContentLoading(label: "加载中");
     }
@@ -79,31 +79,40 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
     return _listView();
   }
 
-  Widget _listView(){
-     return ListView(
-      children: _downloads.map((e) => GestureDetector(
-        key: Key("DOWNLOAD:${e.id}"),
-        onTap: () {
-          if (e.dlStatus == 3) {
-            return;
-          }
-          Navigator.of(context).push(
-            MaterialPageRoute(builder: (BuildContext context) {
-              return DownloadAlbumScreen(e);
-            }),
-          );
-        },
-        onLongPress: () async {
-          String? action = await chooseListDialog(context,
-              values: ["删除"], title: "请选择");
-          if (action != null && action == "删除") {
-            await methods.deleteDownload(e.id);
-            _load();
-          }
-        },
-        child: ComicDownloadCard(e),
-      ))
-          .toList(),
+  Widget _listView() {
+    return ListView(
+      children:
+          _downloads
+              .map(
+                (e) => GestureDetector(
+                  key: Key("DOWNLOAD:${e.id}"),
+                  onTap: () {
+                    if (e.dlStatus == 3) {
+                      return;
+                    }
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (BuildContext context) {
+                          return DownloadAlbumScreen(e);
+                        },
+                      ),
+                    );
+                  },
+                  onLongPress: () async {
+                    String? action = await chooseListDialog(
+                      context,
+                      values: ["删除"],
+                      title: "请选择",
+                    );
+                    if (action != null && action == "删除") {
+                      await methods.deleteDownload(e.id);
+                      _load();
+                    }
+                  },
+                  child: ComicDownloadCard(e),
+                ),
+              )
+              .toList(),
     );
   }
 
@@ -112,15 +121,11 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
       onPressed: () async {
         await Navigator.push(
           context,
-          MaterialPageRoute(
-            builder: (context) => const DownloadImportScreen(),
-          ),
+          MaterialPageRoute(builder: (context) => const DownloadImportScreen()),
         );
         _load();
       },
-      icon: const Icon(
-        Icons.drive_folder_upload,
-      ),
+      icon: const Icon(Icons.drive_folder_upload),
     );
   }
 
@@ -135,9 +140,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
         );
         _load();
       },
-      icon: const Icon(
-        Icons.sim_card_download_outlined,
-      ),
+      icon: const Icon(Icons.sim_card_download_outlined),
     );
   }
 
@@ -148,9 +151,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
         setState(() {});
       },
       minWidth: 0,
-      child: Text(
-        "$downloadThreadCount线程",
-      ),
+      child: Text("$downloadThreadCount线程"),
     );
   }
 }

@@ -30,7 +30,7 @@ class _ViewLogScreenState extends State<ViewLogScreen> {
   Widget buildScreen(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("浏览记录"),
+        title: const Text("浏览历史"),
         actions: [
           IconButton(
             onPressed: () async {
@@ -41,11 +41,13 @@ class _ViewLogScreenState extends State<ViewLogScreen> {
               );
               if ("是" == choose) {
                 await methods.clearViewLog();
-                Navigator.of(context).pushReplacement(MaterialPageRoute(
-                  builder: (BuildContext context) {
-                    return const ViewLogScreen();
-                  },
-                ));
+                Navigator.of(context).pushReplacement(
+                  MaterialPageRoute(
+                    builder: (BuildContext context) {
+                      return const ViewLogScreen();
+                    },
+                  ),
+                );
               }
             },
             icon: const Icon(Icons.auto_delete),
@@ -57,22 +59,16 @@ class _ViewLogScreenState extends State<ViewLogScreen> {
         key: Key(key),
         onPage: (int page) async {
           final response = await methods.pageViewLog(page);
-          return InnerComicPage(
-            total: response.total,
-            list: response.content,
-          );
+          return InnerComicPage(total: response.total, list: response.content);
         },
         longPressMenuItems: [
-          ComicLongPressMenuItem(
-            "删除浏览记录",
-            (ComicBasic comic) async {
-              defaultToast(context, "删除${comic.name}");
-              await methods.deleteViewLogByComicId(comic.id);
-              setState(() {
-                key = "HISTORY::" + Random().nextInt(100000).toString();
-              });
-            },
-          ),
+          ComicLongPressMenuItem("删除浏览历史", (ComicBasic comic) async {
+            defaultToast(context, "删除${comic.name}");
+            await methods.deleteViewLogByComicId(comic.id);
+            setState(() {
+              key = "HISTORY::" + Random().nextInt(100000).toString();
+            });
+          }),
         ],
       ),
     );

@@ -6,13 +6,7 @@ import 'package:jasmine/basic/methods.dart';
 import 'package:jasmine/configs/login.dart';
 import 'local_build.dart';
 
-enum DailySignStatus {
-  unavailable,
-  unchecked,
-  checking,
-  signed,
-  error,
-}
+enum DailySignStatus { unavailable, unchecked, checking, signed, error }
 
 DailySignStatus dailySignStatus = DailySignStatus.unchecked;
 
@@ -26,24 +20,26 @@ void _setDailySignStatus(DailySignStatus status) {
 String dailySignStatusLabel() {
   switch (dailySignStatus) {
     case DailySignStatus.unavailable:
-      return "签到待接入";
+      return "当前线路暂不支持签到";
     case DailySignStatus.checking:
-      return "检测中...";
+      return "签到中…";
     case DailySignStatus.signed:
-      return "已打卡";
+      return "已签到";
     case DailySignStatus.error:
-      return "打卡失败";
+      return "签到失败，点击重试";
     case DailySignStatus.unchecked:
     default:
-      return "未检测打卡";
+      return "每日签到";
   }
 }
 
-Future<void> checkDailySignStatus(BuildContext context,
-    {bool toast = false}) async {
+Future<void> checkDailySignStatus(
+  BuildContext context, {
+  bool toast = false,
+}) async {
   if (!dailyEndpointAvailable) {
     _setDailySignStatus(DailySignStatus.unavailable);
-    if (toast) defaultToast(context, "所选上游尚无每日签到的协议实现");
+    if (toast) defaultToast(context, "当前线路暂不支持签到，请尝试切换内容线路");
     return;
   }
   if (loginStatus != LoginStatus.loginSuccess) {
@@ -54,7 +50,7 @@ Future<void> checkDailySignStatus(BuildContext context,
   try {
     final msg = await methods.daily(selfInfo.uid);
     if (toast) {
-      defaultToast(context, msg.isNotEmpty ? msg : "已打卡");
+      defaultToast(context, msg.isNotEmpty ? msg : "已签到");
     }
     _setDailySignStatus(DailySignStatus.signed);
   } catch (e, st) {

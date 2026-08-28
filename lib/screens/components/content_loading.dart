@@ -1,37 +1,29 @@
 import 'package:flutter/material.dart';
+import 'content_state.dart';
 
 class ContentLoading extends StatelessWidget {
   final String label;
-
-  const ContentLoading({Key? key, this.label = "加载中"}) : super(key: key);
+  const ContentLoading({super.key, this.label = '正在加载…'});
 
   @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (BuildContext context, BoxConstraints constraints) {
-        var width = constraints.maxWidth;
-        var height = constraints.maxHeight;
-        var min = width < height ? width : height;
-        var theme = Theme.of(context);
-        return Center(
-          child: Column(
-            children: [
-              Expanded(child: Container()),
-              SizedBox(
-                width: min / 2,
-                height: min / 2,
-                child: CircularProgressIndicator(
-                  color: theme.colorScheme.secondary,
-                  backgroundColor: Colors.grey[100],
-                ),
-              ),
-              Container(height: min / 10),
-              Text(label, style: TextStyle(fontSize: min / 15)),
-              Expanded(child: Container()),
-            ],
+  Widget build(BuildContext context) => ContentStateLayout(
+    child: Semantics(
+      liveRegion: true,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox.square(
+            dimension: 36,
+            child: CircularProgressIndicator(strokeWidth: 3),
           ),
-        );
-      },
-    );
-  }
+          const SizedBox(height: 20),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodyLarge,
+          ),
+        ],
+      ),
+    ),
+  );
 }

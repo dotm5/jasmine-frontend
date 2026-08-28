@@ -3,133 +3,111 @@ import 'package:jasmine/basic/commons.dart';
 import 'package:jasmine/configs/versions.dart';
 import 'package:jasmine/screens/components/badge.dart';
 import 'components/right_click_pop.dart';
+import 'local_build_screen.dart';
 
-class AboutScreen extends StatefulWidget {
-  const AboutScreen({Key? key}) : super(key: key);
+class AboutScreen extends StatelessWidget {
+  const AboutScreen({super.key});
 
-  @override
-  State<StatefulWidget> createState() {
-    return _AboutState();
-  }
-}
-
-class _AboutState extends State<AboutScreen> {
   @override
   Widget build(BuildContext context) {
-    return rightClickPop(child: buildScreen(context), context: context);
-  }
-
-  Widget buildScreen(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("关于"),
-      ),
-      body: ListView(
-        children: [
-          const Divider(),
-          _buildLogo(),
-          const Divider(),
-          _buildCurrentVersion(),
-          const Divider(),
-          _buildNewestVersion(),
-          if (latestVersion != null) _buildGotoGithub(),
-          const Divider(),
-          _buildVersionText(),
-          const Divider(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLogo() {
-    return LayoutBuilder(
-      builder: (BuildContext context, BoxConstraints constraints) {
-        double? width, height;
-        if (constraints.maxWidth < constraints.maxHeight) {
-          width = constraints.maxWidth / 3;
-        } else {
-          height = constraints.maxHeight / 3;
-        }
-        double l = width ?? height!;
-        return Column(
-          children: [
-            Container(height: l / 4),
-            SizedBox(
-              width: l,
-              height: l,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints.expand(),
-                child: Container(
-                  padding: const EdgeInsets.all(10),
-                  child: Opacity(
-                    opacity: 0.9,
-                    child: Icon(Icons.abc,size: l,),
+    final theme = Theme.of(context);
+    final info = latestVersionInfo();
+    return rightClickPop(
+      context: context,
+      child: Scaffold(
+        appBar: AppBar(title: const Text('关于')),
+        body: SafeArea(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 720),
+              child: ListView(
+                padding: const EdgeInsets.all(20),
+                children: [
+                  const SizedBox(height: 20),
+                  Center(
+                    child: Container(
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primaryContainer,
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                      child: Icon(
+                        Icons.auto_stories_outlined,
+                        size: 56,
+                        color: theme.colorScheme.onPrimaryContainer,
+                      ),
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 20),
+                  Text(
+                    'Jasmine',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.headlineMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '发现喜欢的，接着上次读。',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodyLarge?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+                  Card(
+                    child: Column(
+                      children: [
+                        ListTile(
+                          leading: const Icon(Icons.verified_outlined),
+                          title: const Text('当前版本'),
+                          subtitle: Text(currentVersion()),
+                        ),
+                        const Divider(height: 1, indent: 56),
+                        ListTile(
+                          leading: const VersionBadged(
+                            child: Icon(Icons.update),
+                          ),
+                          title: const Text('更新信息'),
+                          subtitle: Text(latestVersion ?? '暂未获取更新信息'),
+                        ),
+                        if (latestVersion != null)
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                            child: OutlinedButton.icon(
+                              onPressed: () => openUrl(latestDownloadUrl()),
+                              icon: const Icon(Icons.open_in_new),
+                              label: const Text('前往下载页面'),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Card(
+                    child: ListTile(
+                      leading: const Icon(Icons.help_outline),
+                      title: const Text('功能与说明'),
+                      subtitle: const Text('使用提示与开源致谢'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap:
+                          () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const LocalBuildScreen(),
+                            ),
+                          ),
+                    ),
+                  ),
+                  if (info != null && info.isNotEmpty) ...[
+                    const SizedBox(height: 24),
+                    Text('更新内容', style: theme.textTheme.titleMedium),
+                    const SizedBox(height: 12),
+                    SelectableText(info),
+                  ],
+                ],
               ),
             ),
-            Container(height: l / 4),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _buildCurrentVersion() {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
-      child: Text("当前版本 : ${currentVersion()}"),
-    );
-  }
-
-  Widget _buildNewestVersion() {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
-      child: Text.rich(TextSpan(
-        children: [
-          const TextSpan(text: "最新版本 : "),
-          _buildNewestVersionSpan(),
-        ],
-      )),
-    );
-  }
-
-  InlineSpan _buildNewestVersionSpan() {
-    return WidgetSpan(
-      child: Container(
-        padding: const EdgeInsets.only(right: 20),
-        child: VersionBadged(
-          child: Text(
-            "${latestVersion ?? "没有检测到新版本"}    ",
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildGotoGithub() {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
-      child: GestureDetector(
-        child: const Text(
-          "去下载地址",
-          style: TextStyle(color: Colors.blue),
-        ),
-        onTap: () async {
-          await openUrl(latestDownloadUrl());
-        },
-      ),
-    );
-  }
-
-  Widget _buildVersionText() {
-    var info = latestVersionInfo();
-    if (info != null) {
-      info = "更新内容\n\n$info";
-    }
-    return Container(
-      padding: const EdgeInsets.all(20),
-      child: SelectableText(info ?? ""),
     );
   }
 }

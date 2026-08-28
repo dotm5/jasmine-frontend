@@ -61,8 +61,12 @@ Future<T?> chooseApiDialog<T>(BuildContext buildContext) async {
     context: buildContext,
     builder: (BuildContext context) {
       return SimpleDialog(
-        title: const Text("API分流"),
+        title: const Text("内容线路"),
         children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(24, 0, 24, 12),
+            child: Text('测速仅供参考，请以实际加载结果为准。'),
+          ),
           ..._apiList.map(
             (e) => SimpleDialogOption(
               child: ApiOptionRow(e, key: Key("API:${e}")),
@@ -74,7 +78,10 @@ Future<T?> chooseApiDialog<T>(BuildContext buildContext) async {
           SimpleDialogOption(
             child: const Text("手动输入"),
             onPressed: () async {
-              Navigator.of(context).pop(await _manualInputApiHost(context));
+              final value = await _manualInputApiHost(context);
+              if (context.mounted && value != null) {
+                Navigator.of(context).pop(value);
+              }
             },
           ),
           SimpleDialogOption(
@@ -91,13 +98,13 @@ Future<T?> chooseApiDialog<T>(BuildContext buildContext) async {
 
 final TextEditingController _controller = TextEditingController();
 
-Future<String> _manualInputApiHost(BuildContext context) async {
+Future<String?> _manualInputApiHost(BuildContext context) async {
   _controller.text = _apiHost;
   return await showDialog(
     context: context,
     builder: (BuildContext context) {
       return AlertDialog(
-        title: const Text("手动输入API地址"),
+        title: const Text("输入内容线路地址"),
         content: TextField(
           controller: _controller,
           decoration: const InputDecoration(hintText: "www.example.com"),
@@ -142,9 +149,10 @@ class _ApiOptionRowState extends State<ApiOptionRow> {
   @override
   Widget build(BuildContext context) {
     return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Text(widget.value),
-        Expanded(child: Container()),
+        Expanded(child: Text(widget.value)),
+        const SizedBox(width: 12),
         FutureBuilder(
           future: _feature,
           builder: (BuildContext context, AsyncSnapshot<int> snapshot) {
@@ -159,7 +167,7 @@ class _ApiOptionRowState extends State<ApiOptionRow> {
               return PingStatus("${ping}ms", Colors.green);
             }
             if (ping <= 500) {
-              return PingStatus("${ping}ms", Colors.yellow);
+              return PingStatus("${ping}ms", Colors.amber.shade800);
             }
             return PingStatus("${ping}ms", Colors.orange);
           },
@@ -178,6 +186,7 @@ class PingStatus extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
         Text('\u2022', style: TextStyle(color: color)),
         Text(" $title"),
@@ -205,9 +214,10 @@ Widget apiHostSetting() {
       return ListTile(
         onTap: () async {
           await chooseApiHost(context);
-          setState(() {});
+          if (context.mounted) setState(() {});
         },
-        title: const Text("API分流"),
+        title: const Text("内容线路"),
+        trailing: const Icon(Icons.chevron_right),
         subtitle: Text(_apiHost),
       );
     },

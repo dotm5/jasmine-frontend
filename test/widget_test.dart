@@ -103,13 +103,12 @@ void main() {
     },
   );
 
-  testWidgets('local build page describes the independent backend', (
-    tester,
-  ) async {
+  testWidgets('feature page uses user-facing descriptions', (tester) async {
     await tester.pumpWidget(const MaterialApp(home: LocalBuildScreen()));
-    expect(find.text('本地构建'), findsOneWidget);
-    expect(find.text('Jasmine + Jenny'), findsOneWidget);
-    expect(find.textContaining('按 Release 协议接入'), findsOneWidget);
+    expect(find.text('功能与说明'), findsOneWidget);
+    expect(find.text('把阅读留给自己'), findsOneWidget);
+    expect(find.text('发现与阅读'), findsOneWidget);
+    expect(find.textContaining('Release 协议'), findsNothing);
     expect(calls, isEmpty);
   });
 

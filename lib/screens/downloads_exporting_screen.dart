@@ -22,7 +22,7 @@ class DownloadsExportingScreen extends StatefulWidget {
   final List<int> idList;
 
   const DownloadsExportingScreen({Key? key, required this.idList})
-      : super(key: key);
+    : super(key: key);
 
   @override
   State<StatefulWidget> createState() => _DownloadsExportingScreenState();
@@ -129,13 +129,10 @@ class _DownloadsExportingScreenState extends State<DownloadsExportingScreen> {
           return Container(
             width: constraints.maxWidth,
             padding: const EdgeInsets.all(15),
-            color:
-                (Theme.of(context).textTheme.bodyMedium?.color ?? Colors.black)
-                    .withOpacity(.05),
-            child: Text(
-              text,
-              textAlign: TextAlign.center,
-            ),
+            color: (Theme.of(context).textTheme.bodyMedium?.color ??
+                    Colors.black)
+                .withOpacity(.05),
+            child: Text(text, textAlign: TextAlign.center),
           );
         },
       ),
@@ -151,7 +148,10 @@ class _DownloadsExportingScreenState extends State<DownloadsExportingScreen> {
       await chooseEx(context);
     }
     if (!await confirmDialog(
-        context, "导出确认", "将您所选的漫画分别导出JMI${showExportPath()}")) {
+      context,
+      "导出确认",
+      "将您所选的漫画分别导出JMI${showExportPath()}",
+    )) {
       return;
     }
     try {
@@ -166,15 +166,13 @@ class _DownloadsExportingScreenState extends State<DownloadsExportingScreen> {
         });
         String? rename;
         if (currentExportRename()) {
-          rename = await displayTextInputDialog(context,
-              title: "导出重命名", src: ab?.album?.name ?? "");
+          rename = await displayTextInputDialog(
+            context,
+            title: "导出重命名",
+            src: ab?.album?.name ?? "",
+          );
         }
-        await methods.export_jm_jmi_single(
-          value,
-          path,
-          rename,
-          deleteExport,
-        );
+        await methods.export_jm_jmi_single(value, path, rename, deleteExport);
       }
       exported = true;
     } catch (err) {
@@ -196,7 +194,10 @@ class _DownloadsExportingScreenState extends State<DownloadsExportingScreen> {
       await chooseEx(context);
     }
     if (!await confirmDialog(
-        context, "导出确认", "将您所选的漫画分别导出PDF${showExportPath()}")) {
+      context,
+      "导出确认",
+      "将您所选的漫画分别导出PDF${showExportPath()}",
+    )) {
       return;
     }
     try {
@@ -209,11 +210,7 @@ class _DownloadsExportingScreenState extends State<DownloadsExportingScreen> {
         setState(() {
           exportMessage = "正在导出 : " + (ab?.album?.name ?? "");
         });
-        await methods.export_jm_pdf(
-          value,
-          path,
-          deleteExport,
-        );
+        await methods.export_jm_pdf(value, path, deleteExport);
       }
       exported = true;
     } catch (err) {
@@ -235,7 +232,10 @@ class _DownloadsExportingScreenState extends State<DownloadsExportingScreen> {
       await chooseEx(context);
     }
     if (!await confirmDialog(
-        context, "导出确认", "将您所选的漫画分别导出cbzs.zip${showExportPath()}")) {
+      context,
+      "导出确认",
+      "将您所选的漫画分别导出cbzs.zip${showExportPath()}",
+    )) {
       return;
     }
     try {
@@ -250,15 +250,13 @@ class _DownloadsExportingScreenState extends State<DownloadsExportingScreen> {
         });
         String? rename;
         if (currentExportRename()) {
-          rename = await displayTextInputDialog(context,
-              title: "导出重命名", src: ab?.album?.name ?? "");
+          rename = await displayTextInputDialog(
+            context,
+            title: "导出重命名",
+            src: ab?.album?.name ?? "",
+          );
         }
-        await methods.export_cbzs_zip_single(
-          value,
-          path,
-          rename,
-          deleteExport,
-        );
+        await methods.export_cbzs_zip_single(value, path, rename, deleteExport);
       }
       exported = true;
     } catch (err) {
@@ -280,7 +278,10 @@ class _DownloadsExportingScreenState extends State<DownloadsExportingScreen> {
       await chooseEx(context);
     }
     if (!await confirmDialog(
-        context, "导出确认", "将您所选的漫画分别导出ZIP${showExportPath()}")) {
+      context,
+      "导出确认",
+      "将您所选的漫画分别导出ZIP${showExportPath()}",
+    )) {
       return;
     }
     try {
@@ -295,15 +296,13 @@ class _DownloadsExportingScreenState extends State<DownloadsExportingScreen> {
         });
         String? rename;
         if (currentExportRename()) {
-          rename = await displayTextInputDialog(context,
-              title: "导出重命名", src: ab?.album?.name ?? "");
+          rename = await displayTextInputDialog(
+            context,
+            title: "导出重命名",
+            src: ab?.album?.name ?? "",
+          );
         }
-        await methods.export_jm_zip_single(
-          value,
-          path,
-          rename,
-          deleteExport,
-        );
+        await methods.export_jm_zip_single(value, path, rename, deleteExport);
       }
       exported = true;
     } catch (err) {
@@ -325,7 +324,10 @@ class _DownloadsExportingScreenState extends State<DownloadsExportingScreen> {
       await chooseEx(context);
     }
     if (!await confirmDialog(
-        context, "导出确认", "将您所选的漫画分别导出JPEGS.ZIP${showExportPath()}")) {
+      context,
+      "导出确认",
+      "将您所选的漫画分别导出JPEGS.ZIP${showExportPath()}",
+    )) {
       return;
     }
     try {
@@ -340,8 +342,11 @@ class _DownloadsExportingScreenState extends State<DownloadsExportingScreen> {
         });
         String? rename;
         if (currentExportRename()) {
-          rename = await displayTextInputDialog(context,
-              title: "导出重命名", src: ab?.album?.name ?? "");
+          rename = await displayTextInputDialog(
+            context,
+            title: "导出重命名",
+            src: ab?.album?.name ?? "",
+          );
         }
         await methods.export_jm_jpegs_zip_single(
           value,
@@ -370,7 +375,10 @@ class _DownloadsExportingScreenState extends State<DownloadsExportingScreen> {
       await chooseEx(context);
     }
     if (!await confirmDialog(
-        context, "导出确认", "将您所选的漫画分别导出EPUB${showExportPath()}")) {
+      context,
+      "导出确认",
+      "将您所选的漫画分别导出EPUB${showExportPath()}",
+    )) {
       return;
     }
     try {
@@ -385,15 +393,13 @@ class _DownloadsExportingScreenState extends State<DownloadsExportingScreen> {
         });
         String? rename;
         if (currentExportRename()) {
-          rename = await displayTextInputDialog(context,
-              title: "导出重命名", src: ab?.album?.name ?? "");
+          rename = await displayTextInputDialog(
+            context,
+            title: "导出重命名",
+            src: ab?.album?.name ?? "",
+          );
         }
-        await methods.export_jm_epub_single(
-          value,
-          path,
-          rename,
-          deleteExport,
-        );
+        await methods.export_jm_epub_single(value, path, rename, deleteExport);
       }
       exported = true;
     } catch (err) {
@@ -416,19 +422,13 @@ class _DownloadsExportingScreenState extends State<DownloadsExportingScreen> {
   }
 
   Widget buildScreen(BuildContext context) {
-    return WillPopScope(
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text("批量导出"),
-        ),
-        body: _body(),
-      ),
-      onWillPop: () async {
-        if (exporting) {
+    return PopScope<void>(
+      canPop: !exporting,
+      child: Scaffold(appBar: AppBar(title: const Text("批量导出")), body: _body()),
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && exporting) {
           defaultToast(context, "导出中, 请稍后");
-          return false;
         }
-        return true;
       },
     );
   }

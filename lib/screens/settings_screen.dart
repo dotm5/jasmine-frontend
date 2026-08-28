@@ -47,6 +47,7 @@ import '../configs/web_dav_url.dart';
 import '../configs/web_dav_username.dart';
 import '../configs/passed.dart' as passed_config;
 import 'components/right_click_pop.dart';
+import 'components/responsive_settings_body.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({Key? key}) : super(key: key);
@@ -210,133 +211,126 @@ class _SettingsState extends State<SettingsScreen> {
     return rightClickPop(child: buildScreen(context), context: context);
   }
 
+  Widget _section(
+    String title,
+    String subtitle,
+    IconData icon,
+    List<Widget> children,
+  ) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      clipBehavior: Clip.antiAlias,
+      child: ExpansionTile(
+        key: PageStorageKey(title),
+        leading: Icon(icon, color: Theme.of(context).colorScheme.primary),
+        title: Text(title),
+        subtitle: Text(subtitle),
+        tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        shape: const Border(),
+        collapsedShape: const Border(),
+        childrenPadding: const EdgeInsets.only(bottom: 8),
+        children: children,
+      ),
+    );
+  }
+
   Widget buildScreen(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("设置"),
-      ),
-      body: SingleChildScrollView(
-        child: Column(
+      appBar: AppBar(title: const Text('设置')),
+      body: SafeArea(
+        child: ResponsiveSettingsBody(
           children: [
-            ExpansionTile(
-              leading: const Icon(Icons.manage_accounts),
-              title: const Text('用户和网络'),
-              children: [
-                const Divider(),
-                apiHostSetting(),
-                cdnHostSetting(),
-                proxySetting(),
-                const Divider(),
-                createFavoriteFolderItemTile(context),
-                deleteFavoriteFolderItemTile(context),
-                renameFavoriteFolderItemTile(context),
-                const Divider(),
-                ListTile(
-                  onTap: () async {
-                    if (await confirmDialog(
-                        context, "清除账号信息", "您确定要清除账号信息并退出APP吗?")) {
-                      await methods.logout();
-                      exit(0);
-                    }
-                  },
-                  title: const Text("清除账号信息"),
-                ),
-                const Divider(),
-              ],
-            ),
-            ExpansionTile(
-              leading: Icon(Icons.menu_book_outlined),
-              title: Text('阅读'),
-              children: [
-                const Divider(),
-                volumeKeyControlSetting(),
-                noAnimationSetting(),
-                const Divider(),
-                gestureSpeedSetting(),
-                dragRegionLockSetting(),
-                readerZoomMinScaleSetting(),
-                readerZoomMaxScaleSetting(),
-                readerZoomDoubleTapScaleSetting(),
-                const Divider(),
-                twoGalleryDirectionSetting(context),
-                const Divider(),
-              ],
-            ),
-            ExpansionTile(
-              leading: Icon(Icons.backup),
-              title: Text('同步'),
-              children: [
-                const Divider(),
-                webDavSyncSwitchSetting(),
-                webDavUrlSetting(),
-                webDavUserNameSetting(),
-                webDavPasswordSetting(),
-                webDavSyncClick(context),
-                webDavSyncUploadClick(context),
-                webDavSyncDownloadClick(context),
-                const Divider(),
-              ],
-            ),
-            ExpansionTile(
-              leading: Icon(Icons.ad_units),
-              title: Text('系统和应用程序'),
-              children: [
-                alwaysEnterBrowserSetting(),
-                const Divider(),
-                _resetBrowserTile(context),
-                const Divider(),
-                _startupImageSettingTile(context),
-                if (_startupImageExists) _deleteStartupImageTile(context),
-                const Divider(),
-                disableRecommendContentSetting(),
-                if (localFeaturesEnabled) ...[
-                  const Divider(),
-                  autoUpdateCheckSetting(),
-                  ignoreUpgradePopSetting(),
-                  const Divider(),
-                ],
-                const Divider(),
-                ignoreVewLogSetting(),
-                const Divider(),
-                appOrientationWidget(),
-                const Divider(),
-                categoriesSortSetting(context),
-                themeSetting(context),
-                const Divider(),
-                androidDisplayModeSetting(),
-                const Divider(),
-                usingRightClickPopSetting(),
-                escToPopSetting(),
-                const Divider(),
-                comicSealCategorySetting(),
-                comicSealTitleWordsSetting(),
-                const Divider(),
-                authenticationSetting(),
-                const Divider(),
-                exportRenameSetting(),
-                downloadAndExportToSetting(),
-                const Divider(),
-                displayJmcodeSetting(),
-                const Divider(),
-                ListTile(
-                  onTap: () {
-                    Navigator.of(context).push(MaterialPageRoute(
-                        builder: (c) => const DownloadsExportScreen2()));
-                  },
-                  title: const Text("导出下载到目录(即使没有下载完)"),
-                ),
-                const Divider(),
-                searchTitleWordsSetting(),
-                ...fontSizeAdjustSettings(),
-                const Divider(),
-              ],
-            ),
-            SafeArea(
-              top: false,
-              child: Container(
-                height: 50,
+            _section('网络连接', '内容线路、图片线路与代理', Icons.wifi_outlined, [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 8, 16, 12),
+                child: Text('内容线路用于列表、搜索和详情；图片线路用于封面和正文。'),
               ),
-            ),
+              apiHostSetting(),
+              cdnHostSetting(),
+              proxySetting(),
+            ]),
+            _section('账号与收藏', '收藏夹管理、退出登录', Icons.manage_accounts_outlined, [
+              createFavoriteFolderItemTile(context),
+              renameFavoriteFolderItemTile(context),
+              deleteFavoriteFolderItemTile(context),
+              const Divider(),
+              ListTile(
+                title: const Text('退出登录'),
+                subtitle: const Text('清除保存的账号信息并关闭应用'),
+                onTap: () async {
+                  if (await confirmDialog(
+                    context,
+                    '退出登录',
+                    '将清除保存的账号信息并关闭应用，确定继续吗？',
+                  )) {
+                    await methods.logout();
+                    exit(0);
+                  }
+                },
+              ),
+            ]),
+            _section('阅读体验', '翻页、手势与图片缩放', Icons.menu_book_outlined, [
+              volumeKeyControlSetting(),
+              noAnimationSetting(),
+              gestureSpeedSetting(),
+              dragRegionLockSetting(),
+              readerZoomMinScaleSetting(),
+              readerZoomMaxScaleSetting(),
+              readerZoomDoubleTapScaleSetting(),
+              twoGalleryDirectionSetting(context),
+            ]),
+            _section('外观与显示', '主题、字号与屏幕方向', Icons.palette_outlined, [
+              themeSetting(context),
+              ...fontSizeAdjustSettings(),
+              appOrientationWidget(),
+              androidDisplayModeSetting(),
+              categoriesSortSetting(context),
+              displayJmcodeSetting(),
+            ]),
+            _section('下载与导出', '保存位置、文件命名与导出', Icons.download_outlined, [
+              exportRenameSetting(),
+              downloadAndExportToSetting(),
+              ListTile(
+                onTap:
+                    () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (c) => const DownloadsExportScreen2(),
+                      ),
+                    ),
+                title: const Text('导出已下载内容'),
+                subtitle: const Text('支持导出尚未全部下载完成的漫画'),
+                trailing: const Icon(Icons.chevron_right),
+              ),
+            ]),
+            _section('数据同步', '通过 WebDAV 备份与同步', Icons.sync_outlined, [
+              webDavSyncSwitchSetting(),
+              webDavUrlSetting(),
+              webDavUserNameSetting(),
+              webDavPasswordSetting(),
+              webDavSyncClick(context),
+              webDavSyncUploadClick(context),
+              webDavSyncDownloadClick(context),
+            ]),
+            _section('隐私与内容', '浏览记录、内容过滤与应用锁', Icons.shield_outlined, [
+              ignoreVewLogSetting(),
+              authenticationSetting(),
+              disableRecommendContentSetting(),
+              comicSealCategorySetting(),
+              comicSealTitleWordsSetting(),
+              searchTitleWordsSetting(),
+            ]),
+            _section('启动与其他', '启动图、更新提醒与快捷操作', Icons.tune_outlined, [
+              alwaysEnterBrowserSetting(),
+              _resetBrowserTile(context),
+              _startupImageSettingTile(context),
+              if (_startupImageExists) _deleteStartupImageTile(context),
+              if (localFeaturesEnabled) ...[
+                autoUpdateCheckSetting(),
+                ignoreUpgradePopSetting(),
+              ],
+              usingRightClickPopSetting(),
+              escToPopSetting(),
+            ]),
           ],
         ),
       ),

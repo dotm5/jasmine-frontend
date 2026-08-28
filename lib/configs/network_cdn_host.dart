@@ -83,9 +83,10 @@ Widget cdnHostSetting() {
       return ListTile(
         onTap: () async {
           await chooseCdnHost(context);
-          setState(() {});
+          if (context.mounted) setState(() {});
         },
-        title: const Text("图片分流"),
+        title: const Text("图片线路"),
+        trailing: const Icon(Icons.chevron_right),
         subtitle: Text(_cdnHost),
       );
     },
@@ -97,8 +98,12 @@ Future<T?> chooseCdnDialog<T>(BuildContext buildContext) async {
     context: buildContext,
     builder: (BuildContext context) {
       return SimpleDialog(
-        title: const Text("图片分流"),
+        title: const Text("图片线路"),
         children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(24, 0, 24, 12),
+            child: Text('测速仅供参考，请以实际加载结果为准。'),
+          ),
           ..._cdnList.map(
             (e) => SimpleDialogOption(
               child: CdnOptionRow(e, key: Key("CDN:${e}")),
@@ -110,7 +115,10 @@ Future<T?> chooseCdnDialog<T>(BuildContext buildContext) async {
           SimpleDialogOption(
             child: const Text("手动输入"),
             onPressed: () async {
-              Navigator.of(context).pop(await _manualInputApiHost(context));
+              final value = await _manualInputApiHost(context);
+              if (context.mounted && value != null) {
+                Navigator.of(context).pop(value);
+              }
             },
           ),
           SimpleDialogOption(
@@ -127,13 +135,13 @@ Future<T?> chooseCdnDialog<T>(BuildContext buildContext) async {
 
 final TextEditingController _controller = TextEditingController();
 
-Future<String> _manualInputApiHost(BuildContext context) async {
+Future<String?> _manualInputApiHost(BuildContext context) async {
   _controller.text = _cdnHost;
   return await showDialog(
     context: context,
     builder: (BuildContext context) {
       return AlertDialog(
-        title: const Text("手动输入CDN地址"),
+        title: const Text("输入图片线路地址"),
         content: TextField(
           controller: _controller,
           decoration: const InputDecoration(hintText: "www.example.com"),
@@ -178,9 +186,10 @@ class _CdnOptionRowState extends State<CdnOptionRow> {
   @override
   Widget build(BuildContext context) {
     return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Text(widget.value),
-        Expanded(child: Container()),
+        Expanded(child: Text(widget.value)),
+        const SizedBox(width: 12),
         FutureBuilder(
           future: _feature,
           builder: (BuildContext context, AsyncSnapshot<int> snapshot) {
@@ -195,7 +204,7 @@ class _CdnOptionRowState extends State<CdnOptionRow> {
               return PingStatus("${ping}ms", Colors.green);
             }
             if (ping <= 500) {
-              return PingStatus("${ping}ms", Colors.yellow);
+              return PingStatus("${ping}ms", Colors.amber.shade800);
             }
             return PingStatus("${ping}ms", Colors.orange);
           },
@@ -214,6 +223,7 @@ class PingStatus extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
         Text('\u2022', style: TextStyle(color: color)),
         Text(" $title"),

@@ -14,7 +14,7 @@ class ContentBuilder<T> extends StatelessWidget {
     required this.future,
     required this.onRefresh,
     required this.successBuilder,
-    this.loadingLabel = '加载中',
+    this.loadingLabel = '正在加载…',
   }) : super(key: key);
 
   @override
