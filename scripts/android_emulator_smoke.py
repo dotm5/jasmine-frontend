@@ -20,6 +20,7 @@ PACKAGE = "opensource.jasmine.local"
 ACTIVITY = f"{PACKAGE}/opensource.jmtt2mic.MainActivity"
 AVD = "jasmine_api30_smoke"
 CHAIN = "JASMINE_SMOKE_OFFLINE"
+NETWORK_SNAPSHOT = "network-state-before.json"
 
 
 def labels(tree):
@@ -43,23 +44,49 @@ class Smoke:
         self.prefix = [str(adb), "-P", str(port), "-s", serial]
         self.output = output
         self.pids = set()
+        self.network_snapshot = None
+        self.network_changed = False
+        self.network_restore_attempts = 0
+        self.network_restored = False
+        self.avd_name = None
+        self.boot_id = None
         self.report = {"started_at": datetime.now(timezone.utc).isoformat(), "status": "running", "serial": serial,
                        "package": PACKAGE, "checks": [], "scope": "Offline emulator smoke only; not physical-device or live API validation"}
 
-    def adb(self, *args, timeout=30, check=True, binary=False):
+    def _run_adb(self, *args, timeout=30, binary=False):
         started = time.monotonic()
         cmd = self.prefix + list(map(str, args))
-        result = subprocess.run(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                timeout=timeout, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        try:
+            result = subprocess.run(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                    timeout=timeout, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        except (OSError, subprocess.TimeoutExpired) as error:
+            entry = {"args": cmd, "exit_code": 124, "seconds": round(time.monotonic() - started, 3),
+                     "stdout": "", "stderr": str(error)[:2000]}
+            with (self.output / "commands.jsonl").open("a", encoding="utf-8") as file:
+                file.write(json.dumps(entry, ensure_ascii=False) + "\n")
+            raise
         output = result.stdout.decode("utf-8", errors="replace") if not binary else result.stdout
         error = result.stderr.decode("utf-8", errors="replace")
         entry = {"args": cmd, "exit_code": result.returncode, "seconds": round(time.monotonic() - started, 3),
                  "stdout": f"{len(output)} binary bytes" if binary else output[:5000], "stderr": error[:2000]}
         with (self.output / "commands.jsonl").open("a", encoding="utf-8") as file:
             file.write(json.dumps(entry, ensure_ascii=False) + "\n")
-        if check and result.returncode:
-            raise RuntimeError(f"adb command failed ({result.returncode}): {args!r}\n{error}\n{output if not binary else ''}")
+        return result.returncode, output, error
+
+    def adb_result(self, *args, timeout=30, binary=False):
+        return self._run_adb(*args, timeout=timeout, binary=binary)
+
+    def adb(self, *args, timeout=30, check=True, binary=False):
+        code, output, error = self._run_adb(*args, timeout=timeout, binary=binary)
+        if check and code:
+            raise RuntimeError(f"adb command failed ({code}): {args!r}\n{error}\n{output if not binary else ''}")
         return output
+
+    def _restore_result(self, *args, timeout=10):
+        try:
+            return self.adb_result(*args, timeout=timeout)
+        except (OSError, subprocess.TimeoutExpired) as error:
+            return 124, "", f"adb command did not complete: {error}"
 
     def passed(self, name, **details):
         self.report["checks"].append({"name": name, "status": "passed", **details})
@@ -118,6 +145,144 @@ class Smoke:
         self.pids.add(pid)
         return pid
 
+    @staticmethod
+    def _lines(value):
+        return [line.strip() for line in str(value).splitlines() if line.strip()]
+
+    @staticmethod
+    def _missing_chain(error):
+        text = str(error).lower()
+        return any(marker in text for marker in ("no chain", "does not exist", "not found"))
+
+    def _capture_guest_identity(self):
+        code, avd, error = self.adb_result("emu", "avd", "name", timeout=10)
+        if code or not self._lines(avd):
+            raise RuntimeError(f"Could not identify guest AVD: {error or avd}")
+        avd = self._lines(avd)[0]
+        code, boot_id, error = self.adb_result(
+            "shell", "cat", "/proc/sys/kernel/random/boot_id", timeout=10
+        )
+        boot_id = self._lines(boot_id)[0] if self._lines(boot_id) else ""
+        if code or not boot_id:
+            raise RuntimeError(f"Could not identify guest boot_id: {error or boot_id}")
+        self.avd_name = avd
+        self.boot_id = boot_id
+        return avd, boot_id
+
+    def _read_guest_setting(self, key):
+        code, value, error = self.adb_result("shell", "settings", "get", "global", key, timeout=10)
+        if code:
+            raise RuntimeError(f"Could not read guest setting {key}: {error or value}")
+        values = self._lines(value)
+        if not values or values[-1] not in {"0", "1"}:
+            raise RuntimeError(f"Guest setting {key} is not a restorable 0/1 value: {value!r}")
+        return values[-1]
+
+    def _firewall_snapshot(self, command):
+        code, chain, error = self.adb_result("shell", command, "-S", CHAIN, timeout=10)
+        if code == 0:
+            chain_exists = True
+            chain_rules = self._lines(chain)
+        elif self._missing_chain(error or chain):
+            chain_exists = False
+            chain_rules = []
+        else:
+            raise RuntimeError(f"Could not inspect {command} {CHAIN}: {error or chain}")
+        code, output, error = self.adb_result("shell", command, "-S", "OUTPUT", timeout=10)
+        if code:
+            raise RuntimeError(f"Could not inspect {command} OUTPUT: {error or output}")
+        output_rules = self._lines(output)
+        output_jumps = [line for line in output_rules if f"-j {CHAIN}" in line]
+        return {
+            "chain_exists": chain_exists,
+            "chain_rules": chain_rules,
+            "output_rules": output_rules,
+            "output_jumps": output_jumps,
+        }
+
+    def _persist_network_snapshot(self):
+        if not self.avd_name or not self.boot_id:
+            self._capture_guest_identity()
+        if self.avd_name != AVD:
+            raise RuntimeError("Connected emulator is not the project's owned AVD")
+        settings = {
+            key: self._read_guest_setting(key)
+            for key in ("airplane_mode_on", "wifi_on", "mobile_data")
+        }
+        firewalls = {command: self._firewall_snapshot(command) for command in ("iptables", "ip6tables")}
+        preexisting = [
+            command
+            for command, state in firewalls.items()
+            if state["chain_exists"] or state["output_jumps"]
+        ]
+        snapshot = {
+            "schema": 1,
+            "captured_at": datetime.now(timezone.utc).isoformat(),
+            "serial": self.report["serial"],
+            "avd": self.avd_name,
+            "boot_id": self.boot_id,
+            "chain": CHAIN,
+            "settings": settings,
+            "firewalls": firewalls,
+            "restore_scope": "Only JASMINE_SMOKE_OFFLINE and its own OUTPUT jump; no other chains or tables",
+        }
+        # Persist before changing any guest network setting. A pre-existing
+        # same-name chain is deliberately rejected rather than overwritten.
+        self.save_text(NETWORK_SNAPSHOT, json.dumps(snapshot, ensure_ascii=False, indent=2) + "\n")
+        self.network_snapshot = snapshot
+        self.report["network"] = {
+            "snapshot": str(self.output / NETWORK_SNAPSHOT),
+            "settings_before": settings,
+            "firewalls_before": firewalls,
+            "chain_preexisting": preexisting,
+        }
+        if preexisting:
+            raise RuntimeError(
+                "Refusing to alter pre-existing JASMINE_SMOKE_OFFLINE chain/jump: "
+                + ", ".join(preexisting)
+            )
+
+    def load_network_snapshot(self, path):
+        snapshot = json.loads(Path(path).read_text(encoding="utf-8"))
+        if snapshot.get("schema") != 1:
+            raise ValueError(f"Unsupported guest network snapshot schema: {snapshot.get('schema')}")
+        if snapshot.get("serial") != self.report["serial"]:
+            raise ValueError("Guest network snapshot serial differs from this emulator.")
+        if snapshot.get("avd") != AVD or not snapshot.get("boot_id"):
+            raise ValueError("Guest network snapshot is not bound to this project AVD/boot_id.")
+        if snapshot.get("chain") != CHAIN:
+            raise ValueError("Guest network snapshot chain is not the owned smoke chain.")
+        settings = snapshot.get("settings")
+        firewalls = snapshot.get("firewalls")
+        if not isinstance(settings, dict) or not isinstance(firewalls, dict):
+            raise ValueError("Guest network snapshot is missing restorable settings/firewalls.")
+        for key in ("airplane_mode_on", "wifi_on", "mobile_data"):
+            if settings.get(key) not in {"0", "1"}:
+                raise ValueError(f"Guest network snapshot setting {key} is not 0/1.")
+        for command in ("iptables", "ip6tables"):
+            state = firewalls.get(command)
+            if not isinstance(state, dict):
+                raise ValueError(f"Guest network snapshot is missing {command} state.")
+            if state.get("chain_exists") or state.get("output_jumps"):
+                raise ValueError(
+                    f"Guest network snapshot contains a pre-existing {command} chain/jump."
+                )
+        self.network_snapshot = snapshot
+        self.network_changed = True
+        self.report["network"] = {
+            "snapshot": str(Path(path)),
+            "settings_before": snapshot.get("settings", {}),
+            "firewalls_before": snapshot.get("firewalls", {}),
+            "chain_preexisting": [],
+        }
+
+    def _validate_snapshot_identity(self, snapshot):
+        avd, boot_id = self._capture_guest_identity()
+        if avd != snapshot.get("avd") or boot_id != snapshot.get("boot_id"):
+            raise RuntimeError(
+                "Guest network snapshot AVD/boot_id differs; restoration stopped without changes."
+            )
+
     def offline(self):
         # Restrict only this owned Android guest. Root comes from the unmodified
         # official Google APIs debug image, not an exploit or a host change.
@@ -125,12 +290,16 @@ class Smoke:
         self.adb("wait-for-device", timeout=45)
         if self.adb("shell", "id", "-u").strip() != "0":
             raise RuntimeError("The owned Google APIs image did not provide adb root")
+        self._persist_network_snapshot()
+        self.network_changed = True
         for service in ("wifi", "data"):
             self.adb("shell", "svc", service, "disable")
         self.adb("shell", "settings", "put", "global", "airplane_mode_on", "1")
         self.adb("shell", "am", "broadcast", "-a", "android.intent.action.AIRPLANE_MODE", "--ez", "state", "true")
         for command in ("iptables", "ip6tables"):
-            self.adb("shell", command, "-N", CHAIN, check=False)
+            code, output, error = self.adb_result("shell", command, "-N", CHAIN, timeout=10)
+            if code:
+                raise RuntimeError(f"Could not create owned {command} chain: {error or output}")
             self.adb("shell", command, "-F", CHAIN)
             self.adb("shell", command, "-A", CHAIN, "-o", "lo", "-j", "RETURN")
             self.adb("shell", command, "-A", CHAIN, "-j", "REJECT")
@@ -142,6 +311,123 @@ class Smoke:
             if f"-A {CHAIN} -j REJECT" not in rules:
                 raise RuntimeError("Guest offline rule verification failed")
         self.passed("guest_ipv4_ipv6_offline", host_firewall_changed=False)
+        self.report["network"]["offline_applied"] = True
+
+    def restore_network(self):
+        """Restore the captured guest state; safe to call repeatedly."""
+        self.network_restore_attempts += 1
+        if self.network_snapshot is None:
+            self.report.setdefault("network", {})["restore"] = "not-needed"
+            return
+        if self.network_restored:
+            self.report.setdefault("network", {})["restore_repeated"] = self.network_restore_attempts
+            return
+        if not self.network_changed:
+            self.report.setdefault("network", {})["restore"] = "not-needed"
+            return
+        errors = []
+        snapshot = self.network_snapshot
+        # Remove only the jump to our chain, then flush/delete only our chain.
+        # Any foreign rule in the same-named chain stops cleanup rather than
+        # touching another agent's rules.
+        self._validate_snapshot_identity(snapshot)
+        for command in ("iptables", "ip6tables"):
+            code, output, error = self._restore_result("shell", command, "-S", "OUTPUT", timeout=10)
+            if code and not self._missing_chain(error or output):
+                errors.append(f"{command} OUTPUT: {error or output}")
+                continue
+            own_jump = f"-A OUTPUT -j {CHAIN}"
+            own_jump_present = own_jump in self._lines(output)
+            code, chain_output, error = self._restore_result(
+                "shell", command, "-S", CHAIN, timeout=10
+            )
+            if code:
+                if not self._missing_chain(error or chain_output):
+                    errors.append(f"{command} inspect {CHAIN}: {error or chain_output}")
+                elif own_jump_present:
+                    # The chain disappeared independently; remove only the
+                    # exact jump this smoke run could have inserted.
+                    code, remove_output, remove_error = self._restore_result(
+                        "shell", command, "-D", "OUTPUT", "-j", CHAIN, timeout=10
+                    )
+                    if code and not self._missing_chain(remove_error or remove_output):
+                        errors.append(f"{command} remove OUTPUT jump: {remove_error or remove_output}")
+                continue
+            rules = self._lines(chain_output)
+            reject_type = "icmp-port-unreachable" if command == "iptables" else "icmp6-port-unreachable"
+            owned_rules = {
+                f"-N {CHAIN}",
+                f"-A {CHAIN} -o lo -j RETURN",
+                f"-A {CHAIN} -j REJECT --reject-with {reject_type}",
+            }
+            if any(
+                rule not in owned_rules
+                for rule in rules
+            ):
+                errors.append(f"{command} {CHAIN} contains a foreign rule; preserved")
+                continue
+            # The smoke run inserts one exact jump only when it was absent.
+            # Remove one matching rule, preserving any later duplicate added
+            # by another actor during the run.
+            if own_jump_present:
+                code, output, error = self._restore_result(
+                    "shell", command, "-D", "OUTPUT", "-j", CHAIN, timeout=10
+                )
+                if code and not self._missing_chain(error or output):
+                    errors.append(f"{command} remove OUTPUT jump: {error or output}")
+            for args in (("-F", CHAIN), ("-X", CHAIN)):
+                code, output, error = self._restore_result("shell", command, *args, timeout=10)
+                if code and not self._missing_chain(error or output):
+                    errors.append(f"{command} {' '.join(args)}: {error or output}")
+
+        settings = snapshot["settings"]
+        for service, key in (("wifi", "wifi_on"), ("data", "mobile_data")):
+            value = settings.get(key)
+            if value not in {"0", "1"}:
+                errors.append(f"Guest setting {key} is not restorable: {value!r}")
+                continue
+            mode = "enable" if value == "1" else "disable"
+            code, output, error = self._restore_result("shell", "svc", service, mode, timeout=10)
+            if code:
+                errors.append(f"svc {service} {mode}: {error or output}")
+            code, output, error = self._restore_result(
+                "shell", "settings", "put", "global", key, value, timeout=10
+            )
+            if code:
+                errors.append(f"settings {key}: {error or output}")
+
+        airplane = settings.get("airplane_mode_on")
+        if airplane not in {"0", "1"}:
+            errors.append(f"Guest setting airplane_mode_on is not restorable: {airplane!r}")
+        else:
+            code, output, error = self._restore_result(
+                "shell", "settings", "put", "global", "airplane_mode_on", airplane, timeout=10
+            )
+            if code:
+                errors.append(f"settings airplane_mode_on: {error or output}")
+            state = "true" if airplane == "1" else "false"
+            code, output, error = self._restore_result(
+                "shell",
+                "am",
+                "broadcast",
+                "-a",
+                "android.intent.action.AIRPLANE_MODE",
+                "--ez",
+                "state",
+                state,
+                timeout=10,
+            )
+            if code:
+                errors.append(f"airplane broadcast: {error or output}")
+
+        self.report.setdefault("network", {})["restore_attempts"] = self.network_restore_attempts
+        self.report["network"]["restored"] = not errors
+        self.report["network"]["restore_errors"] = errors
+        if errors:
+            raise RuntimeError("Guest network restoration failed: " + "; ".join(errors))
+        self.network_restored = True
+        self.network_changed = False
+        self.passed("guest_network_restored", repeated_attempts=self.network_restore_attempts)
 
     def run(self, root):
         started = time.monotonic()
@@ -262,12 +548,51 @@ def main():
     parser.add_argument("--adb-port", type=int, default=5038)
     parser.add_argument("--serial", default="emulator-5554")
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument(
+        "--restore-network",
+        action="store_true",
+        help="restore the guest network state from a persisted smoke snapshot",
+    )
+    parser.add_argument("--network-snapshot", type=Path)
     args = parser.parse_args()
+    if args.network_snapshot is not None and not args.restore_network:
+        parser.error("--network-snapshot requires --restore-network")
+    if args.restore_network and args.network_snapshot is None:
+        parser.error("--restore-network requires --network-snapshot")
     root = Path(__file__).resolve().parents[1]
     output = args.output.resolve()
     if not output.is_relative_to(root / ".tmp" / "emulator-runs"):
         raise ValueError("Test evidence must remain under this workspace's .tmp/emulator-runs")
     output.mkdir(parents=True, exist_ok=True)
+    if args.restore_network:
+        snapshot_path = args.network_snapshot.resolve()
+        if not snapshot_path.is_relative_to(output):
+            raise ValueError("Guest network snapshot must remain in the selected emulator run directory")
+        if not snapshot_path.is_file():
+            raise FileNotFoundError(f"Guest network snapshot not found: {snapshot_path}")
+        smoke = Smoke(args.adb, args.adb_port, args.serial, output)
+        report_path = output / "network-restore-report.json"
+        try:
+            smoke.load_network_snapshot(snapshot_path)
+            smoke.restore_network()
+            smoke.report["status"] = "restored"
+        except Exception as error:
+            smoke.report["status"] = "failed"
+            smoke.report["network_restore_error"] = str(error)
+            smoke.report["traceback"] = traceback.format_exc()
+        finally:
+            smoke.report["finished_at"] = datetime.now(timezone.utc).isoformat()
+            report_path.write_text(
+                json.dumps(smoke.report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+            )
+        print(
+            json.dumps(
+                {"status": smoke.report["status"], "report": str(report_path)},
+                ensure_ascii=False,
+            ),
+            flush=True,
+        )
+        return 1 if smoke.report["status"] == "failed" else 0
     if (output / "smoke-report.json").exists():
         raise FileExistsError("Previous report preserved; select a new output directory")
     smoke = Smoke(args.adb, args.adb_port, args.serial, output)
@@ -281,6 +606,11 @@ def main():
         except Exception as capture_error:
             smoke.report["failure_capture_error"] = str(capture_error)
     finally:
+        try:
+            smoke.restore_network()
+        except Exception as restore_error:
+            smoke.report["status"] = "failed"
+            smoke.report["network_restore_error"] = str(restore_error)
         smoke.report["finished_at"] = datetime.now(timezone.utc).isoformat()
         (output / "smoke-report.json").write_text(json.dumps(smoke.report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(json.dumps({"status": smoke.report["status"], "checks": len(smoke.report["checks"]), "report": str(output / "smoke-report.json")}), flush=True)

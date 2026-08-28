@@ -28,6 +28,7 @@ $view = $null
 $emulatorProcess = $null
 $adbOwned = $false
 $adb = $null
+$networkRestoreFailure = $null
 $result = [ordered]@{ startedAt = (Get-Date -Format o); status = 'preparing'; avd = $avdName; port = $Port; adbPort = $AdbPort; runDirectory = $run; headless = (-not $ShowWindow); gpu = $Gpu; systemConfigurationChanged = $false }
 
 function Save-RunStatus { $result | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $run 'status.json') -Encoding utf8 }
@@ -147,6 +148,58 @@ try {
     if ($null -ne $emulatorProcess) {
         $emulatorProcess.Refresh()
         if (-not $emulatorProcess.HasExited) {
+            $snapshotPath = Join-Path $run 'network-state-before.json'
+            $smokeReportPath = Join-Path $run 'smoke-report.json'
+            $pythonAlreadyRestored = $false
+            $pythonNetworkNotNeeded = $false
+            if (Test-Path -LiteralPath $smokeReportPath -PathType Leaf) {
+                try {
+                    $smokeReport = Get-Content -LiteralPath $smokeReportPath -Raw | ConvertFrom-Json
+                    $networkProperty = $smokeReport.PSObject.Properties['network']
+                    if ($null -ne $networkProperty -and $null -ne $networkProperty.Value) {
+                        $restoredProperty = $networkProperty.Value.PSObject.Properties['restored']
+                        $pythonAlreadyRestored = $null -ne $restoredProperty -and [bool]$restoredProperty.Value
+                        $restoreProperty = $networkProperty.Value.PSObject.Properties['restore']
+                        $pythonNetworkNotNeeded = $null -ne $restoreProperty -and [string]$restoreProperty.Value -eq 'not-needed'
+                    }
+                } catch {
+                    $pythonAlreadyRestored = $false
+                    $pythonNetworkNotNeeded = $false
+                }
+            }
+            if ($pythonAlreadyRestored) {
+                $result.networkRestoreFallback = [ordered]@{ status = 'already-restored'; snapshot = $snapshotPath; source = $smokeReportPath }
+            } elseif ($pythonNetworkNotNeeded) {
+                $result.networkRestoreFallback = [ordered]@{ status = 'not-needed'; snapshot = $snapshotPath; source = $smokeReportPath }
+            } elseif (Test-Path -LiteralPath $snapshotPath -PathType Leaf) {
+                $restoreReportPath = Join-Path $run 'network-restore-report.json'
+                try {
+                    $restoreOutput = & $env:JASMINE_PYTHON (Join-Path $root 'scripts\android_emulator_smoke.py') --adb $adb --adb-port $AdbPort --serial ("emulator-" + $Port) --output $run --restore-network --network-snapshot $snapshotPath 2>&1
+                    $restoreExit = $LASTEXITCODE
+                    $restoreOutput | Out-File -LiteralPath (Join-Path $run 'network-restore-fallback.log') -Encoding utf8
+                    $restoreStatus = if ($restoreExit -eq 0) { 'restored' } else { 'failed' }
+                    if (Test-Path -LiteralPath $restoreReportPath -PathType Leaf) {
+                        try {
+                            $restoreDocument = Get-Content -LiteralPath $restoreReportPath -Raw | ConvertFrom-Json
+                            $statusProperty = $restoreDocument.PSObject.Properties['status']
+                            if ($null -ne $statusProperty) { $restoreStatus = [string]$statusProperty.Value }
+                        } catch {
+                            $restoreStatus = 'failed'
+                        }
+                    }
+                    $result.networkRestoreFallback = [ordered]@{ status = $restoreStatus; snapshot = $snapshotPath; report = $restoreReportPath; exitCode = $restoreExit }
+                    if ($restoreExit -ne 0 -or $restoreStatus -eq 'failed') {
+                        $result.status = 'failed'
+                        $networkRestoreFailure = "Python network restoration exited with code $restoreExit"
+                    }
+                } catch {
+                    $result.status = 'failed'
+                    $result.networkRestoreFallback = [ordered]@{ status = 'failed'; snapshot = $snapshotPath; report = $restoreReportPath; error = $_.Exception.Message }
+                    $networkRestoreFailure = $_.Exception.Message
+                }
+            } else {
+                $result.networkRestoreFallback = [ordered]@{ status = 'not-needed'; snapshot = $snapshotPath }
+            }
             & $adb -P $AdbPort -s "emulator-$Port" emu kill 2>&1 | Out-File -LiteralPath (Join-Path $run 'emulator-stop.log') -Encoding utf8
             if (-not $emulatorProcess.WaitForExit(20000)) {
                 # This Process object is the child launched above, never a name
@@ -163,3 +216,4 @@ try {
     $result.finishedAt = Get-Date -Format o
     Save-RunStatus
 }
+if ($null -ne $networkRestoreFailure) { throw "Network restoration fallback failed: $networkRestoreFailure" }
