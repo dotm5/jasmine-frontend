@@ -124,10 +124,10 @@ JSON 请求和响应保持字符串 envelope；`bridge-contract.json` 由后端 
 产物包携带该契约。前端包构建无需读取私有 Rust 实现。
 方法注册和合成响应测试不等于真实账号、线上阅读或下载验收。
 
-上游遗留 Actions 仍指向它自己的私有核心，尚未迁移，本 Fork 的 Actions 当前禁用。
-本地 `gh` 凭据没有写入 Actions secrets；本次分仓不自动发布 APK 或后端二进制。
-将来公开 PR 检查可只跑前端 mock 测试；需要私有源码的构建应单独配置最小读取权限，
-不把私有 token 交给来自外部 PR 的代码执行。
+本 Fork 使用独立的前后端 CI 与 Android Release 工作流，具体触发方式及产物见
+[自动发布说明](CI-RELEASE.md)。公开 PR 仅跑前端测试；受信任的发布任务用专用只读部署密钥
+检出 gitlink 固定的后端版本。签名材料保存在 Actions secrets，不存入 Git。
+本地个人 `gh` 令牌没有写入 Actions secrets，私有源码与构建日志不作为公开 artifact 上传。
 
 后端“独立”指源码、构建和版本边界，不表示全量原创。Jenny、jmcomic-downloader 等
 来源及条件保留在私有仓库的 `UPSTREAM-NOTICES.md` 和 `upstream/` 中。

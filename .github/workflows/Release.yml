@@ -1,371 +1,138 @@
-name: Release
-
-permissions:
-  contents: write
-
+name: Android Release
 on:
+  push:
+    branches: [master]
+    tags: ['v*']
   workflow_dispatch:
-
-env:
-  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  RUST_TOOLCHAIN: nightly-2025-02-26
-  NDK_VERSION: 27.2.12479018
-  FLUTTER_CHANNEL: stable
-  FLUTTER_VERSION: '3.29.3'
-  JDK_VERSION: 17
-
+permissions:
+  contents: read
+concurrency:
+  group: android-release-${{ github.ref }}
+  cancel-in-progress: false
 jobs:
-
-  ci-pass:
-    name: CI is green
-    runs-on: ubuntu-latest
-    needs:
-      - check_release
-      - build_release_assets
+  tests:
+    uses: ./.github/workflows/Build.yml
+  build:
+    if: github.repository == 'dotm5/jasmine-frontend' && (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v'))
+    needs: tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/native/target
+      ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/26.3.11579264
+      JASMINE_TEST_BRIDGE_BINARY: ${{ github.workspace }}/native/target/debug/examples/bridge_stdio_fixture
+      JASMINE_REQUIRE_API_COVERAGE: '1'
+      JASMINE_API_AUDIT_REPORT: ${{ github.workspace }}/.tmp/api-runtime.json
     steps:
-      - run: exit 0
-
-  check_release:
-    name: Check release
-    runs-on: ubuntu-latest
-    outputs:
-      matrix: ${{ steps.check-release.outputs.matrix }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-
-      - name: Check and create release
-        id: check-release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          export VERSION=$(cat ci/version.code.txt | xargs echo)
-          echo "VERSION : $VERSION"
-          declare -A asset_dict
-          asset_dict["ios"]="${{ github.event.repository.name }}-$VERSION-nosign.ipa"
-          asset_dict["android-arm64"]="${{ github.event.repository.name }}-arm64-$VERSION.apk"
-          asset_dict["android-arm32"]="${{ github.event.repository.name }}-arm32-$VERSION.apk"
-          asset_dict["android-core"]="${{ github.event.repository.name }}-android-core-$VERSION.zip"
-          asset_dict["windows"]="${{ github.event.repository.name }}-$VERSION-windows-x86_64.zip"
-          asset_dict["linux"]="${{ github.event.repository.name }}-$VERSION.AppImage"
-          asset_dict["macos"]="${{ github.event.repository.name }}-$VERSION.dmg"
-          declare -A host_dict
-          host_dict["ios"]="macos-14"
-          host_dict["android-arm64"]="ubuntu-latest"
-          host_dict["android-arm32"]="ubuntu-latest"
-          host_dict["android-core"]="ubuntu-latest"
-          host_dict["windows"]="windows-2022"
-          host_dict["linux"]="ubuntu-latest"
-          host_dict["macos"]="macos-14"
-          export RELEASE=$(gh release view $VERSION --json id -q .id || echo "NOT_FOUND")
-          echo "RELEASE : $RELEASE"
-          if [ "$RELEASE" == "NOT_FOUND" ]; then
-            echo "Release does not exist. Creating release $VERSION."
-            gh release create $VERSION -t $VERSION -F ci/version.info.txt --target ${{ github.sha }}
-          else
-            echo "Release $VERSION already exists."
-          fi
-          gh release view $VERSION --json assets > release_assets.json
-          echo release_assets.json :
-          cat release_assets.json
-          matrix='['
-          for key in "${!asset_dict[@]}"; do
-            asset_name=${asset_dict[$key]}
-            asset_exists=$(jq ".assets[].label" release_assets.json | grep -Fx "\"$asset_name\"" || echo "NOT_FOUND")
-            if [ "$asset_exists" == "NOT_FOUND" ]; then
-              echo "Asset $asset_name does not exist. Upload is required."
-              matrix+="{\"target\": \"$key\", \"host\": \"${host_dict[$key]}\"},"
-            else
-              echo "Asset $asset_name already exists. No upload is required."
-            fi
-          done
-          matrix=${matrix%,} # Remove trailing comma
-          matrix+=']'
-          echo matrix=$matrix >> $GITHUB_OUTPUT
-          echo "GITHUB_OUTPUT : $GITHUB_OUTPUT :"
-          cat $GITHUB_OUTPUT
-
-  build_release_assets:
-    name: Build release assets
-    needs:
-      - check_release
-    strategy:
-      fail-fast: false
-      matrix:
-        config: ${{ fromJson(needs.check_release.outputs.matrix) }}
-
-    runs-on: ${{ matrix.config.host }}
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-
-      - name: Cargo cache
-        uses: actions/cache@v3
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          persist-credentials: false
+          submodules: false
+      - name: Read pinned backend commit
+        id: backend
+        run: |
+          pin=$(git ls-tree HEAD native | awk '$1 == "160000" {print $3}')
+          [[ "$pin" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::Missing native gitlink"; exit 1; }
+          echo "sha=$pin" >> "$GITHUB_OUTPUT"
+      - name: Checkout private backend (read-only deploy key)
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: dotm5/jmbackend
+          ref: ${{ steps.backend.outputs.sha }}
+          path: native
+          ssh-key: ${{ secrets.BACKEND_DEPLOY_KEY }}
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: '3.29.3'
+          channel: stable
+      - name: Provision ephemeral runner tools
+        run: |
+          rustup toolchain install 1.97.1 --profile minimal --target aarch64-linux-android
+          rustup default 1.97.1
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;26.3.11579264" "platforms;android-35" "build-tools;35.0.0"
+          mkdir -p .tmp
+          echo "1.7.21-local" > lib/assets/version.txt
+      - name: Test and build pinned backend
+        run: |
+          if ! python native/scripts/ci_android.py --output "$PWD/.tmp/backend-bundle" > .tmp/backend-ci.log 2>&1; then
+            echo "::error::Private backend checks/build failed. Reproduce this pin in the private backend CI; source-bearing compiler logs are not published."
+            exit 1
+          fi
+          echo "Backend unit tests, SQLite smoke and Android build passed."
+      - run: flutter pub get --enforce-lockfile
+      - name: Typed Dart-Rust integration and API coverage
+        run: |
+          if ! flutter test tool_tests --no-pub --reporter expanded > .tmp/integration-ci.log 2>&1; then
+            echo "::error::Dart-Rust integration failed; reproduce locally with the pinned backend."
+            exit 1
+          fi
+          python scripts/check_api_contract_surface.py --runtime-report .tmp/api-runtime.json --out .tmp/api-coverage.json
+          python scripts/check_backend_contract.py --bundle .tmp/backend-bundle
+      - name: Build signed APK
+        env:
+          ANDROID_SIGNING_KEY_BASE64: ${{ secrets.ANDROID_SIGNING_KEY_BASE64 }}
+          ANDROID_SIGNING_STORE_PASSWORD: ${{ secrets.ANDROID_SIGNING_STORE_PASSWORD }}
+          ANDROID_SIGNING_KEY_PASSWORD: ${{ secrets.ANDROID_SIGNING_KEY_PASSWORD }}
+          ANDROID_SIGNING_KEY_ALIAS: androiddebugkey
+          ANDROID_SIGNING_STORE_FILE: ${{ runner.temp }}/jasmine-ci.jks
+        run: |
+          test -n "$ANDROID_SIGNING_KEY_BASE64" || { echo "::error::Signing secret is missing"; exit 1; }
+          trap 'rm -f "$ANDROID_SIGNING_STORE_FILE"' EXIT
+          printf '%s' "$ANDROID_SIGNING_KEY_BASE64" | base64 --decode > "$ANDROID_SIGNING_STORE_FILE"
+          mkdir -p android/app/src/main/jniLibs/arm64-v8a
+          cp .tmp/backend-bundle/jniLibs/arm64-v8a/librust.so android/app/src/main/jniLibs/arm64-v8a/
+          flutter build apk --release --no-pub --target-platform android-arm64
+          python scripts/prepare_ci_release.py --bundle .tmp/backend-bundle --backend-sha "${{ steps.backend.outputs.sha }}"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: android-release
           path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-          key: ${{ runner.os }}-cargo-
-
-      - name: Install rust toolchain
-        uses: actions-rs/toolchain@v1
+            dist/*.apk
+            dist/SHA256SUMS.txt
+            dist/build-manifest.json
+            dist/release-notes.md
+            dist/licenses.zip
+          if-no-files-found: error
+          retention-days: 14
+  publish:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
-
-      - name: checkout core
-        uses: actions/checkout@v3
-        with:
-          token: ${{ secrets.GH_TOKEN }}
-          repository: 'niuhuan/jasmine-rs-core'
-          path: 'native'
-
-      - name: Cache Flutter dependencies (Linux/Android)
-        if: matrix.config.host == 'ubuntu-latest'
-        uses: actions/cache@v3
-        with:
-          path: /opt/hostedtoolcache/flutter
-          key: ${{ runner.os }}-flutter
-
-      - name: Setup flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: ${{ env.FLUTTER_CHANNEL }}
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          architecture: x64
-
-      - name: Install cargo tools (non-android)
-        if: ( matrix.config.target == 'macos' || matrix.config.target == 'windows' || matrix.config.target == 'linux' || matrix.config.target == 'ios' )
-        run: |
-          cargo install --force cbindgen
-
-      - name: Install cargo tools (Android)
-        if: startsWith(matrix.config.target, 'android-')
-        run: |
-          cargo install --force cargo-ndk
-
-      - name: Setup java (Android)
-        if: ( matrix.config.target == 'android-arm32' || matrix.config.target == 'android-arm64' || matrix.config.target == 'android-x86_64'  || matrix.config.target == 'android-core')
-        uses: actions/setup-java@v3
-        with:
-          java-version: ${{ env.JDK_VERSION }}
-          distribution: 'temurin'
-
-      - name: Setup android tools (Android)
-        if: ( matrix.config.target == 'android-arm32' || matrix.config.target == 'android-arm64' || matrix.config.target == 'android-x86_64'  || matrix.config.target == 'android-core')
-        uses: android-actions/setup-android@v3
-        with:
-          cmdline-tools-version: 8512546
-          packages: 'platform-tools platforms;android-32 build-tools;30.0.2 ndk;${{ env.NDK_VERSION }}'
-
-      - name: Install libfuse2 (Linux)
-        if: matrix.config.target == 'linux'
-        run: |
-          sudo apt update
-          sudo apt install -y libfuse2
-
-      - name: Set-Version (All)
-        run: |
-          cd ci
-          cp version.code.txt ../lib/assets/version.txt
-
-      - name: Append application-identifier (ios)
-        if: ( matrix.config.target == 'ios')
-        run: |
-          /usr/libexec/PlistBuddy -c 'Add :application-identifier string opensource.jasmine' ios/Runner/Info.plist
-
-      - name: Install rust target and build (ios)
-        if: ( matrix.config.target == 'ios')
-        run: |
-          rustup target install aarch64-apple-ios
-          cargo build --manifest-path native/jmbackend/platforms/ios/Cargo.toml --features= --lib --release --target=aarch64-apple-ios
-          cp native/jmbackend/platforms/ios/target/aarch64-apple-ios/release/librust.a ios/
-          cbindgen native/jmbackend/src/lib.rs -l c > ios/rust.h
-
-          flutter build ios --no-simulator --no-codesign --release
-          cd build
-          rm -rf Payload
-          mkdir Payload
-          mv ios/iphoneos/Runner.app Payload/
-          sh ../scripts/thin-payload.sh Payload
-          zip -r -9 nosign.ipa Payload
-          cd ..
-      
-
-      # if ios-sim
-      # rustup target install aarch64-apple-ios-sim
-      # rustup target install x86_64-apple-ios
-      # cargo build --manifest-path native/jmbackend/platforms/ios-sim/Cargo.toml --features= --lib --release --target=aarch64-apple-ios-sim
-      # cargo build --manifest-path native/jmbackend/platforms/ios-sim/Cargo.toml --features= --lib --release --target=x86_64-apple-ios
-      # lipo -create -output ios/librust.a native/jmbackend/platforms/ios-sim/target/x86_64-apple-ios/release/librust.a native/jmbackend/platforms/ios-sim/target/aarch64-apple-ios-sim/release/librust.a
-      # cbindgen native/jmbackend/src/lib.rs -l c > ios/rust.h
-
-      - name: Install rust target and build (Android-core)
-        if: ( matrix.config.target == 'android-core')
-        run: |
-          export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/${{ env.NDK_VERSION }}
-          rustup target install aarch64-linux-android
-          rustup target install armv7-linux-androideabi
-          rustup target install x86_64-linux-android
-          cd native/jmbackend/platforms/android
-          cargo ndk -o ../../../../android/app/src/main/jniLibs -t arm64-v8a build --release
-          cargo ndk -o ../../../../android/app/src/main/jniLibs -t armeabi-v7a build --release
-          cargo ndk -o ../../../../android/app/src/main/jniLibs -t x86_64 build --release
-          cd ../../../..
-          zip -r -9 android-core.zip android/app/src/main/jniLibs
-
-      - name: Install rust target and build (Android-arm64)
-        if: ( matrix.config.target == 'android-arm64')
-        run: |
-          export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/${{ env.NDK_VERSION }}
-          rustup target install aarch64-linux-android
-          cd native/jmbackend/platforms/android
-          cargo ndk -o ../../../../android/app/src/main/jniLibs -t arm64-v8a build --release
-          cd ../../../..
-          flutter build apk --target-platform android-arm64
-
-      - name: Install rust target and build (Android-arm32)
-        if: ( matrix.config.target == 'android-arm32')
-        run: |
-          export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/${{ env.NDK_VERSION }}
-          rustup target install armv7-linux-androideabi
-          cd native/jmbackend/platforms/android
-          cargo ndk -o ../../../../android/app/src/main/jniLibs -t armeabi-v7a build --release
-          cd ../../../..
-          flutter build apk --target-platform android-arm
-
-      - name: Install rust target and build (Android-x86_64)
-        if: ( matrix.config.target == 'android-x86_64')
-        run: |
-          export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/${{ env.NDK_VERSION }}
-          rustup target install x86_64-linux-android
-          cd native/jmbackend/platforms/android
-          cargo ndk -o ../../../../android/app/src/main/jniLibs -t x86_64 build --release
-          cd ../../../..
-          flutter build apk --target-platform android-x64
-
-      - name: Install dependencies and build (Linux)
-        if: matrix.config.target == 'linux'
-        run: |
-          sudo apt-get update
-          sudo apt install -y ninja-build liblzma-dev libgtk-3-dev libgl1-mesa-dev xorg-dev
-          curl -JOL https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
-          chmod a+x appimagetool-x86_64.AppImage
-          mv appimagetool-x86_64.AppImage appimagetool
-
-          cargo build --manifest-path native/jmbackend/platforms/linux/Cargo.toml --features= --lib --release --target=x86_64-unknown-linux-gnu
-          cp native/jmbackend/platforms/linux/target/x86_64-unknown-linux-gnu/release/librust.a linux/
-          cbindgen native/jmbackend/src/lib.rs -l c++ > linux/rust.h
-          
-          cbindgen native/jmbackend/platforms/linux/src/lib.rs -l c++ > linux/rust1.h
-
-          flutter config --enable-linux-desktop
-          flutter build linux --release
-          mv build/linux/x64/release/bundle/{jasmine,AppRun}
-          cp linux/appimage/* build/linux/x64/release/bundle/
-          ./appimagetool build/linux/x64/release/bundle/
-          mv *.AppImage build/linux.AppImage
-
-
-      - name: build (windows)
-        if: matrix.config.target == 'windows'
-        run: |
-          cargo build --manifest-path native/jmbackend/platforms/windows/Cargo.toml --release --target x86_64-pc-windows-msvc
-          cp native/jmbackend/platforms/windows/target/x86_64-pc-windows-msvc/release/rust.lib windows/          
-          cbindgen native/jmbackend/src/lib.rs -l c++ > windows/rust.h
-          flutter config --enable-windows-desktop
-          flutter build windows
-          cd build/windows/x64/runner/Release
-          Compress-Archive * ../../../../../build/windows.zip
-          cd ../../../../..
-
-      - name: Build (macos)
-        if: matrix.config.target == 'macos'
-        run: |
-          rustup target install x86_64-apple-darwin
-          rustup target install aarch64-apple-darwin
-          cargo build --manifest-path native/jmbackend/platforms/macos/Cargo.toml --release --target x86_64-apple-darwin
-          cargo build --manifest-path native/jmbackend/platforms/macos/Cargo.toml --release --target aarch64-apple-darwin
-          lipo -create -output macos/librust.a native/jmbackend/platforms/macos/target/x86_64-apple-darwin/release/librust.a native/jmbackend/platforms/macos/target/aarch64-apple-darwin/release/librust.a
-          cbindgen native/jmbackend/src/lib.rs -l c > macos/rust.h
-          flutter config --enable-macos-desktop
-          flutter build macos
-          cd build
-          mkdir appimage
-          mv macos/Build/Products/Release/jasmine.app appimage/
-          ln -sf /Applications appimage/
-          hdiutil create -volname jasmine -srcfolder appimage -ov -format UDBZ macos.dmg
-          cd ..
-
-      - name: Sign APK (Android)
-        if: ( matrix.config.target == 'android-arm32' || matrix.config.target == 'android-arm64' || matrix.config.target == 'android-x86_64' )
+          name: android-release
+          path: dist
+      - name: Publish verified release assets
         env:
-          KEY_FILE_BASE64: ${{ secrets.KEY_FILE_BASE64 }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          COMMIT: ${{ github.sha }}
+          REF: ${{ github.ref }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
-          echo $KEY_FILE_BASE64 > key.jks.base64
-          base64 -d key.jks.base64 > key.jks
-          echo $KEY_PASSWORD | $ANDROID_HOME/build-tools/30.0.2/apksigner sign --ks key.jks build/app/outputs/flutter-apk/app-release.apk
-
-      - name: Upload Asset (windows)
-        if: matrix.config.target == 'windows'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          $VERSION = (Get-Content -Path "ci/version.code.txt").Trim()
-          $asset_path = "build/windows.zip"
-          $asset_name = "${{ github.event.repository.name }}-$VERSION-windows-x86_64.zip"
-          echo "Uploading asset $asset_name from $asset_path"
-          mv $asset_path $asset_name
-          gh release upload $VERSION $asset_name#$asset_name --clobber
-
-      - name: Upload Asset (android , linux)
-        if: startsWith(matrix.config.target, 'android') || startsWith(matrix.config.target, 'linux')
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        shell: bash
-        run: |
-          export VERSION=$(cat ci/version.code.txt | xargs echo)
-          declare -A asset_dict
-          asset_dict["ios"]="${{ github.event.repository.name }}-$VERSION-nosign.ipa"
-          asset_dict["android-arm64"]="${{ github.event.repository.name }}-arm64-$VERSION.apk"
-          asset_dict["android-arm32"]="${{ github.event.repository.name }}-arm32-$VERSION.apk"
-          asset_dict["windows"]="${{ github.event.repository.name }}-$VERSION-windows-x86_64.zip"
-          asset_dict["linux"]="${{ github.event.repository.name }}-$VERSION.AppImage"
-          asset_dict["macos"]="${{ github.event.repository.name }}-$VERSION.dmg"
-          asset_dict["android-core"]="${{ github.event.repository.name }}-android-core-$VERSION.zip"
-          declare -A asset_path_dict
-          asset_path_dict["ios"]="build/nosign.ipa"
-          asset_path_dict["android-arm64"]="build/app/outputs/flutter-apk/app-release.apk"
-          asset_path_dict["android-arm32"]="build/app/outputs/flutter-apk/app-release.apk"
-          asset_path_dict["windows"]="build/windows.zip"
-          asset_path_dict["linux"]="build/linux.AppImage"
-          asset_path_dict["macos"]="build/macos.dmg"
-          asset_path_dict["android-core"]="android-core.zip"
-          
-          asset_name=${asset_dict["${{ matrix.config.target }}"]}
-          asset_path=${asset_path_dict["${{ matrix.config.target }}"]}
-          
-          echo "Uploading asset $asset_name from $asset_path"
-          mv $asset_path $asset_name
-          gh release upload $VERSION "${asset_name}#${asset_name}" --clobber 
-
-      - name: Upload Asset (macos , ios)
-        if: startsWith(matrix.config.target, 'macos') || startsWith(matrix.config.target, 'ios')
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          export VERSION=$(cat ci/version.code.txt | xargs echo)
-          if [ "${{ matrix.config.target }}" == "ios" ]; then
-            asset_name="${{ github.event.repository.name }}-$VERSION-nosign.ipa"
-            asset_path="build/nosign.ipa"
+          cd dist
+          sha256sum -c SHA256SUMS.txt
+          if [[ "$REF" == refs/tags/v* ]]; then
+            tag="$REF_NAME"
+            options=()
           else
-            asset_name="${{ github.event.repository.name }}-$VERSION.dmg"
-            asset_path="build/macos.dmg"
+            tag="ci-${COMMIT:0:12}"
+            options=(--prerelease --latest=false)
           fi
-          echo "Uploading asset $asset_name from $asset_path"
-          mv $asset_path $asset_name
-          gh release upload $VERSION "${asset_name}#${asset_name}" --clobber 
-          
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "::error::Release already exists; assets are immutable. Use a new commit/tag."
+            exit 1
+          fi
+          gh release create "$tag" ./*.apk SHA256SUMS.txt build-manifest.json licenses.zip \
+            --target "$COMMIT" --title "Jasmine $tag" --notes-file release-notes.md "${options[@]}"

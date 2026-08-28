@@ -30,10 +30,25 @@ android {
         versionName = "${flutter.versionName}-local"
     }
 
+    val ciSigningStore = System.getenv("ANDROID_SIGNING_STORE_FILE")
+    if (ciSigningStore != null) {
+        signingConfigs {
+            create("ciRelease") {
+                storeFile = file(ciSigningStore)
+                storePassword = System.getenv("ANDROID_SIGNING_STORE_PASSWORD")
+                    ?: error("Missing CI signing store password")
+                keyAlias = System.getenv("ANDROID_SIGNING_KEY_ALIAS")
+                    ?: error("Missing CI signing key alias")
+                keyPassword = System.getenv("ANDROID_SIGNING_KEY_PASSWORD")
+                    ?: error("Missing CI signing key password")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // Local test artifact only. Publishing requires your own release key.
-            signingConfig = signingConfigs.getByName("debug")
+            // CI uses a stable repository secret; local builds keep their own key.
+            signingConfig = signingConfigs.getByName(if (ciSigningStore != null) "ciRelease" else "debug")
         }
     }
 
