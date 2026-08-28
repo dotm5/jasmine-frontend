@@ -98,7 +98,8 @@ class _BrowserBottomSheetState extends State<_BrowserBottomSheet> {
             Expanded(child: Container()),
             _bottomIcon(
               icon: Icons.view_column_sharp,
-              title: "$pagerColumnNumber 列",
+              title:
+                  pagerColumnNumber == 0 ? '自动适应窗口' : '最多 $pagerColumnNumber 列',
               onPressed: () async {
                 await choosePagerColumnCount(context);
                 setState(() {});
@@ -173,11 +174,7 @@ class _BrowserBottomSheetState extends State<_BrowserBottomSheet> {
               icon: Column(
                 children: [
                   Container(height: 3),
-                  Icon(
-                    icon,
-                    size: 25,
-                    color: Colors.white,
-                  ),
+                  Icon(icon, size: 25, color: Colors.white),
                   Container(height: 3),
                   Text(
                     title,
@@ -189,7 +186,7 @@ class _BrowserBottomSheetState extends State<_BrowserBottomSheet> {
                 ],
               ),
               onPressed: onPressed,
-            )
+            ),
           ],
         ),
       ),

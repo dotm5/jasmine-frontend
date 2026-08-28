@@ -1,3 +1,4 @@
+import 'package:jasmine/screens/components/expressive_page_transitions.dart';
 import 'package:flutter/material.dart';
 import 'package:jasmine/configs/network_api_host.dart';
 import 'package:jasmine/configs/network_cdn_host.dart';
@@ -24,7 +25,7 @@ class NetworkSettingScreen extends StatelessWidget {
             tooltip: '下载管理',
             onPressed: () {
               Navigator.of(context).pushReplacement(
-                MaterialPageRoute(
+                AppPageRoute(
                   builder: (BuildContext context) {
                     return const DownloadsScreen();
                   },
@@ -37,7 +38,7 @@ class NetworkSettingScreen extends StatelessWidget {
             tooltip: '应用设置并重新连接',
             onPressed: () {
               Navigator.of(context).pushReplacement(
-                MaterialPageRoute(
+                AppPageRoute(
                   builder: (BuildContext context) {
                     return const InitScreen();
                   },

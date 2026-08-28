@@ -1,3 +1,4 @@
+import 'package:jasmine/screens/components/expressive_page_transitions.dart';
 import 'package:flutter/material.dart';
 
 import '../basic/commons.dart';
@@ -239,7 +240,7 @@ class _ProScreenState extends State<ProScreen> {
     String? key = await displayTextInputDialog(context, title: "输入PAT授权码");
     if (key != null && key.isNotEmpty) {
       await Navigator.of(context).push(
-        MaterialPageRoute(
+        AppPageRoute(
           builder: (BuildContext context) {
             return AccessKeyReplaceScreen(accessKey: key);
           },

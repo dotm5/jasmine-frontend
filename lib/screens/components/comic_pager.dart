@@ -1,25 +1,33 @@
+import 'package:jasmine/screens/components/expressive_page_transitions.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:jasmine/basic/commons.dart';
 import 'package:jasmine/basic/log.dart';
 import 'package:jasmine/basic/methods.dart';
 import 'package:jasmine/configs/pager_controller_mode.dart';
 import 'package:jasmine/screens/comic_info_screen.dart';
-import 'package:jasmine/screens/components/content_builder.dart';
 import 'package:jasmine/screens/components/types.dart';
 
 import 'comic_list.dart';
+import 'reading_widgets.dart';
 
 class ComicPager extends StatefulWidget {
   final Future<InnerComicPage> Function(int page) onPage;
   final List<ComicLongPressMenuItem>? longPressMenuItems;
   final List<Widget>? appendList;
+  final Widget? header;
+  final Widget? emptyState;
+  final VoidCallback? onReturn;
+  final bool compact;
 
   const ComicPager({
     required this.onPage,
     this.longPressMenuItems,
     this.appendList,
+    this.header,
+    this.emptyState,
+    this.onReturn,
+    this.compact = false,
     Key? key,
   }) : super(key: key);
 
@@ -52,12 +60,20 @@ class _ComicPagerState extends State<ComicPager> {
           onPage: widget.onPage,
           longPressMenuItems: widget.longPressMenuItems,
           appendList: widget.appendList,
+          header: widget.header,
+          emptyState: widget.emptyState,
+          onReturn: widget.onReturn,
+          compact: widget.compact,
         );
       case PagerControllerMode.pager:
         return _PagerPager(
           onPage: widget.onPage,
           longPressMenuItems: widget.longPressMenuItems,
           appendList: widget.appendList,
+          header: widget.header,
+          emptyState: widget.emptyState,
+          onReturn: widget.onReturn,
+          compact: widget.compact,
         );
     }
   }
@@ -67,12 +83,20 @@ class _StreamPager extends StatefulWidget {
   final Future<InnerComicPage> Function(int page) onPage;
   final List<ComicLongPressMenuItem>? longPressMenuItems;
   final List<Widget>? appendList;
+  final Widget? header;
+  final Widget? emptyState;
+  final VoidCallback? onReturn;
+  final bool compact;
 
   const _StreamPager({
     Key? key,
     required this.onPage,
     this.longPressMenuItems,
     this.appendList,
+    this.header,
+    this.emptyState,
+    this.onReturn,
+    this.compact = false,
   }) : super(key: key);
 
   @override
@@ -238,16 +262,31 @@ class _StreamPagerState extends State<_StreamPager> {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        _buildPagerBar(),
+        if (!widget.compact) _buildPagerBar(),
         Expanded(
           child: ComicList(
             controller: _controller,
             onScroll: _onScroll,
             data: _data,
-            appendList:
-                _buildLoadingCard() != null
-                    ? [_buildLoadingCard()!, ...(widget.appendList ?? [])]
-                    : widget.appendList,
+            header: widget.header,
+            onReturn: widget.onReturn,
+            appendList: [
+              if (_buildLoadingCard() != null) _buildLoadingCard()!,
+              if (!_joining && _joinSuccess && _data.isEmpty)
+                widget.emptyState ??
+                    const ReadingEmptyState(
+                      icon: Icons.auto_stories_outlined,
+                      title: '这里还没有漫画',
+                    ),
+              if (!_joining && _joinSuccess && _nextPage <= _maxPage)
+                TextButton.icon(
+                  onPressed: _join,
+                  icon: const Icon(Icons.expand_more),
+                  label: const Text('加载更多'),
+                ),
+              if (widget.compact && _data.isNotEmpty) _buildPagerBar(),
+              ...?widget.appendList,
+            ],
             longPressMenuItems: widget.longPressMenuItems,
           ),
         ),
@@ -255,50 +294,44 @@ class _StreamPagerState extends State<_StreamPager> {
     );
   }
 
-  PreferredSize _buildPagerBar() {
-    return PreferredSize(
-      preferredSize: const Size.fromHeight(30),
-      child: Container(
-        padding: const EdgeInsets.only(left: 10, right: 10),
-        decoration: BoxDecoration(
-          border: Border(
-            bottom: BorderSide(
-              width: .5,
-              style: BorderStyle.solid,
-              color: Colors.grey[200]!,
-            ),
-          ),
-        ),
-        child: GestureDetector(
-          onTap: _jumpPage,
-          behavior: HitTestBehavior.opaque,
-          child: SizedBox(
-            height: 30,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Text("已加载 ${_nextPage - 1} / $_maxPage 页"),
-                Text("已加载 ${_data.length} / $_total 项"),
-              ],
-            ),
-          ),
+  PreferredSize _buildPagerBar() => PreferredSize(
+    preferredSize: const Size.fromHeight(48),
+    child: InkWell(
+      onTap: _jumpPage,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Wrap(
+          spacing: 16,
+          runSpacing: 4,
+          alignment: WrapAlignment.spaceBetween,
+          children: [
+            Text('已加载 ${_nextPage - 1} / $_maxPage 页'),
+            Text('已加载 ${_data.length} / $_total 项'),
+          ],
         ),
       ),
-    );
-  }
+    ),
+  );
 }
 
 class _PagerPager extends StatefulWidget {
   final Future<InnerComicPage> Function(int page) onPage;
   final List<ComicLongPressMenuItem>? longPressMenuItems;
   final List<Widget>? appendList;
+  final Widget? header;
+  final Widget? emptyState;
+  final VoidCallback? onReturn;
+  final bool compact;
 
   const _PagerPager({
     Key? key,
     required this.onPage,
     this.longPressMenuItems,
     this.appendList,
+    this.header,
+    this.emptyState,
+    this.onReturn,
+    this.compact = false,
   }) : super(key: key);
 
   @override
@@ -313,7 +346,6 @@ class _PagerPagerState extends State<_PagerPager> {
   late int _maxPage = 1;
   late final List<ComicSimple> _data = [];
   late Future _pageFuture = _load();
-  late Key _pageKey = UniqueKey();
 
   Future<dynamic> _load() async {
     final requestedPage = _currentPage;
@@ -348,141 +380,137 @@ class _PagerPagerState extends State<_PagerPager> {
 
   @override
   Widget build(BuildContext context) {
-    return ContentBuilder(
-      key: _pageKey,
+    return FutureBuilder(
       future: _pageFuture,
-      onRefresh: () async {
-        setState(() {
-          _pageFuture = _load();
-          _pageKey = UniqueKey();
-        });
-      },
-      successBuilder: (BuildContext context, AsyncSnapshot<dynamic> snapshot) {
-        return Scaffold(
-          appBar: _buildPagerBar(),
-          body: ComicList(
-            appendList: widget.appendList,
-            data: _data,
-            longPressMenuItems: widget.longPressMenuItems,
-          ),
+      builder: (BuildContext context, AsyncSnapshot<dynamic> snapshot) {
+        final ready =
+            snapshot.connectionState == ConnectionState.done &&
+            !snapshot.hasError;
+        return Column(
+          children: [
+            if (!widget.compact) _buildPagerBar(),
+            Expanded(
+              child: ComicList(
+                header: widget.header,
+                onReturn: widget.onReturn,
+                appendList: [
+                  if (snapshot.hasError)
+                    ReadingEmptyState(
+                      icon: Icons.cloud_off_outlined,
+                      title: '加载失败',
+                      action: TextButton(
+                        onPressed:
+                            () => setState(() {
+                              _pageFuture = _load();
+                            }),
+                        child: const Text('重试'),
+                      ),
+                    )
+                  else if (!ready)
+                    const Padding(
+                      padding: EdgeInsets.all(32),
+                      child: Center(child: CircularProgressIndicator()),
+                    )
+                  else if (_data.isEmpty)
+                    widget.emptyState ??
+                        const ReadingEmptyState(
+                          icon: Icons.auto_stories_outlined,
+                          title: '这里还没有漫画',
+                        ),
+                  if (widget.compact && ready && _data.isNotEmpty)
+                    _buildPagerBar(),
+                  ...?widget.appendList,
+                ],
+                data: ready ? _data : const [],
+                longPressMenuItems: widget.longPressMenuItems,
+              ),
+            ),
+          ],
         );
       },
     );
   }
 
-  PreferredSize _buildPagerBar() {
-    return PreferredSize(
-      preferredSize: const Size.fromHeight(50),
-      child: Container(
-        padding: const EdgeInsets.only(left: 10, right: 10),
-        decoration: BoxDecoration(
-          border: Border(
-            bottom: BorderSide(
-              width: .5,
-              style: BorderStyle.solid,
-              color: Colors.grey[200]!,
-            ),
+  PreferredSize _buildPagerBar() => PreferredSize(
+    preferredSize: const Size.fromHeight(56),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: Wrap(
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 12,
+        children: [
+          TextButton(
+            onPressed: _choosePage,
+            child: Text('第 $_currentPage / $_maxPage 页'),
           ),
-        ),
-        child: SizedBox(
-          height: 50,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              InkWell(
-                onTap: () {
-                  _textEditController.clear();
-                  showDialog(
-                    context: context,
-                    builder: (context) {
-                      return AlertDialog(
-                        content: Card(
-                          child: TextField(
-                            controller: _textEditController,
-                            decoration: const InputDecoration(
-                              labelText: "请输入页数：",
-                            ),
-                            keyboardType: TextInputType.number,
-                            inputFormatters: <TextInputFormatter>[
-                              FilteringTextInputFormatter.allow(RegExp(r'\d+')),
-                            ],
-                          ),
-                        ),
-                        actions: <Widget>[
-                          MaterialButton(
-                            onPressed: () {
-                              Navigator.pop(context);
-                            },
-                            child: const Text('取消'),
-                          ),
-                          MaterialButton(
-                            onPressed: () {
-                              Navigator.pop(context);
-                              var text = _textEditController.text;
-                              if (text.isEmpty || text.length > 5) {
-                                return;
-                              }
-                              var num = int.parse(text);
-                              if (num == 0 || num > _maxPage) {
-                                return;
-                              }
-                              setState(() {
-                                _currentPage = num;
-                                _pageFuture = _load();
-                                _pageKey = UniqueKey();
-                              });
-                            },
-                            child: const Text('确定'),
-                          ),
-                        ],
-                      );
-                    },
-                  );
-                },
-                child: Row(children: [Text("第 $_currentPage / $_maxPage 页")]),
+              TextButton(
+                onPressed:
+                    _currentPage > 1 ? () => _goTo(_currentPage - 1) : null,
+                child: const Text('上一页'),
               ),
-              Row(
-                children: [
-                  MaterialButton(
-                    minWidth: 0,
-                    onPressed: () {
-                      if (_currentPage > 1) {
-                        setState(() {
-                          _currentPage = _currentPage - 1;
-                          _pageFuture = _load();
-                          _pageKey = UniqueKey();
-                        });
-                      }
-                    },
-                    child: const Text('上一页'),
-                  ),
-                  MaterialButton(
-                    minWidth: 0,
-                    onPressed: () {
-                      if (_currentPage < _maxPage) {
-                        setState(() {
-                          _currentPage = _currentPage + 1;
-                          _pageFuture = _load();
-                          _pageKey = UniqueKey();
-                        });
-                      }
-                    },
-                    child: const Text('下一页'),
-                  ),
-                ],
+              TextButton(
+                onPressed:
+                    _currentPage < _maxPage
+                        ? () => _goTo(_currentPage + 1)
+                        : null,
+                child: const Text('下一页'),
               ),
             ],
           ),
-        ),
+        ],
       ),
+    ),
+  );
+
+  void _goTo(int page) {
+    setState(() {
+      _currentPage = page;
+      _pageFuture = _load();
+    });
+  }
+
+  Future<void> _choosePage() async {
+    _textEditController.clear();
+    final page = await showDialog<int>(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('跳转到指定页'),
+            content: TextField(
+              controller: _textEditController,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              decoration: InputDecoration(labelText: '页码（1–$_maxPage）'),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('取消'),
+              ),
+              TextButton(
+                onPressed: () {
+                  final page = int.tryParse(_textEditController.text);
+                  if (page != null && page > 0 && page <= _maxPage) {
+                    Navigator.pop(context, page);
+                  }
+                },
+                child: const Text('确定'),
+              ),
+            ],
+          ),
     );
+    if (page != null && mounted) _goTo(page);
   }
 }
 
 bool _redirectAid(int? redirectAid, BuildContext context) {
   if (redirectAid != null) {
     Navigator.of(context).pushReplacement(
-      MaterialPageRoute(
+      AppPageRoute(
         builder: (BuildContext context) {
           return ComicInfoScreen(redirectAid, null);
         },

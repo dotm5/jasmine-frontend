@@ -9,12 +9,7 @@ final Event currentPagerViewModeEvent = Event();
 
 PagerViewMode get currentPagerViewMode => _value;
 
-enum PagerViewMode {
-  cover,
-  info,
-  titleInCover,
-  titleAndCover,
-}
+enum PagerViewMode { cover, info, titleInCover, titleAndCover }
 
 Map<PagerViewMode, String> _nameMap = {
   PagerViewMode.cover: "封面",
@@ -26,9 +21,11 @@ Map<PagerViewMode, String> _nameMap = {
 String get currentPagerViewModeName => _nameMap[_value]!;
 
 Future choosePagerViewMode(BuildContext context) async {
-  final target = await chooseMapDialog(context,
-      title: "请选择展现形式",
-      values: _nameMap.map((key, value) => MapEntry(value, key)));
+  final target = await chooseMapDialog(
+    context,
+    title: "请选择展现形式",
+    values: _nameMap.map((key, value) => MapEntry(value, key)),
+  );
   if (target != null && target != _value) {
     await methods.saveProperty(_propertyKey, "$target");
     _value = target;
@@ -42,7 +39,7 @@ PagerViewMode _parse(String string) {
       return value;
     }
   }
-  return PagerViewMode.cover;
+  return PagerViewMode.titleAndCover;
 }
 
 Future initPagerViewMode() async {

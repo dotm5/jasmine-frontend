@@ -1,3 +1,4 @@
+import 'package:jasmine/screens/components/expressive_page_transitions.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -51,7 +52,7 @@ class _InitScreenState extends State<InitScreen> {
                   TextButton(
                     onPressed:
                         () => Navigator.of(context).push(
-                          MaterialPageRoute(
+                          AppPageRoute(
                             builder: (_) => const NetworkSettingScreen(),
                           ),
                         ),
@@ -107,7 +108,7 @@ class _InitScreenState extends State<InitScreen> {
       }
       Navigator.of(
         context,
-      ).pushReplacement(MaterialPageRoute(builder: (_) => next));
+      ).pushReplacement(AppPageRoute(builder: (_) => next));
     } catch (e, st) {
       debugPrient("$e\n$st");
       if (mounted) setState(() => _initializationError = '$e');
@@ -134,7 +135,7 @@ class _AuthScreenState extends State<AuthScreen> {
   test() async {
     if (await verifyAuthentication(context) && mounted) {
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
+        AppPageRoute(
           builder: (BuildContext context) {
             return const AppScreen();
           },

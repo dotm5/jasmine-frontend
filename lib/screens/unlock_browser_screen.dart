@@ -1,3 +1,4 @@
+import 'package:jasmine/screens/components/expressive_page_transitions.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -64,7 +65,7 @@ class _UnlockBrowserScreenState extends State<UnlockBrowserScreen> {
       await webDavSyncAuto(context);
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (BuildContext context) {
+        AppPageRoute(builder: (BuildContext context) {
           return firstLoginScreen;
         }),
       );
@@ -72,7 +73,7 @@ class _UnlockBrowserScreenState extends State<UnlockBrowserScreen> {
     }
 
     Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (BuildContext context) {
+      AppPageRoute(builder: (BuildContext context) {
         return const AppScreen();
       }),
     );

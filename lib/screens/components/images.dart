@@ -1,3 +1,4 @@
+import 'package:jasmine/screens/components/expressive_page_transitions.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -512,7 +513,7 @@ Widget buildFile(
       );
       switch (choose) {
         case '预览图片':
-          Navigator.of(context).push(MaterialPageRoute(
+          Navigator.of(context).push(AppPageRoute(
             builder: (context) => FilePhotoViewScreen(file),
           ));
           break;

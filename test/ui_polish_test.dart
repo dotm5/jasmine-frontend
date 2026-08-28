@@ -72,6 +72,16 @@ void main() {
             case 'app_config':
             case 'config_links':
               response = '{}';
+            case 'page_view_log':
+              response = jsonEncode({
+                'search_query': '',
+                'total': 0,
+                'content': [],
+              });
+            case 'find_view_log':
+              response = 'null';
+            case 'all_downloads':
+              response = '[]';
             case 'load_download_thread':
               response = '2';
             case 'ping':
@@ -217,28 +227,35 @@ void main() {
       await tester.pumpWidget(app(const UserScreen(), dark: dark));
       await tester.pumpAndSettle();
       expect(find.text('书架'), findsOneWidget);
-      expect(find.text('收藏夹'), findsOneWidget);
-      expect(find.text('浏览历史'), findsOneWidget);
-      expect(find.text('下载管理'), findsOneWidget);
-      expect(find.text('登录 / 注册'), findsOneWidget);
+      expect(find.text('收藏'), findsOneWidget);
+      expect(find.text('最近浏览'), findsOneWidget);
+      expect(find.text('已下载'), findsOneWidget);
+      expect(find.text('还没有浏览记录'), findsOneWidget);
       await capture(tester, 'bookshelf-${dark ? "dark" : "light"}');
 
-      await tester.tap(find.text('收藏夹'));
+      await tester.tap(find.text('收藏'));
       await tester.pumpAndSettle();
-      expect(find.text('登录后即可使用收藏夹'), findsOneWidget);
-      await tester.tap(find.byTooltip('功能与说明'));
+      expect(find.text('登录后查看收藏'), findsOneWidget);
+      await tester.tap(find.byTooltip('账户与设置'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('功能与说明'));
       await tester.pumpAndSettle();
       expect(find.byType(LocalBuildScreen), findsOneWidget);
       await capture(tester, 'features-${dark ? "dark" : "light"}');
       await tester.pageBack();
       await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('设置'));
+      await tester.tap(find.byTooltip('账户与设置'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('设置'));
       await tester.pumpAndSettle();
       expect(find.byType(SettingsScreen), findsOneWidget);
       await capture(tester, 'settings-${dark ? "dark" : "light"}');
       await tester.pageBack();
       await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('关于 Jasmine'));
+      await tester.tap(find.byTooltip('账户与设置'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('关于 Jasmine'));
+      await tester.tap(find.text('关于 Jasmine'));
       await tester.pumpAndSettle();
       expect(find.byType(AboutScreen), findsOneWidget);
       expect(find.text('暂未获取更新信息'), findsOneWidget);
@@ -352,9 +369,11 @@ void main() {
         find.descendant(of: navigation, matching: find.text('书架')).last,
       );
       await tester.pumpAndSettle();
-      expect(find.text('我的阅读'), findsOneWidget);
+      expect(find.text('最近浏览'), findsOneWidget);
       await capture(tester, 'app-$width-${dark ? "dark" : "light"}');
-      await tester.tap(find.byTooltip('设置'));
+      await tester.tap(find.byTooltip('账户与设置'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('设置'));
       await tester.pumpAndSettle();
       expect(
         find.byKey(const ValueKey('settings-column-1')),
@@ -376,13 +395,16 @@ void main() {
     await configure(tester);
     await tester.pumpWidget(app(const UserScreen(), scale: 2));
     await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('账户与设置'));
+    await tester.pumpAndSettle();
     expect(find.text('已签到'), findsOneWidget);
     expect(loginStatus, LoginStatus.loginSuccess);
     expect(tester.takeException(), isNull);
     loginError = true;
     await initLogin(tester.element(find.byType(UserScreen)));
     await tester.pumpAndSettle();
-    expect(find.text('登录未完成'), findsOneWidget);
+    expect(find.textContaining('登录未完成'), findsOneWidget);
+    await tester.ensureVisible(find.text('查看错误详情'));
     await tester.tap(find.text('查看错误详情'));
     await tester.pumpAndSettle();
     expect(find.text('fixture login failure'), findsOneWidget);

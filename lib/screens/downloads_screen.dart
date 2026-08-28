@@ -1,3 +1,4 @@
+import 'package:jasmine/screens/components/expressive_page_transitions.dart';
 import 'package:flutter/material.dart';
 import 'package:jasmine/basic/commons.dart';
 import 'package:jasmine/basic/methods.dart';
@@ -91,7 +92,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                       return;
                     }
                     Navigator.of(context).push(
-                      MaterialPageRoute(
+                      AppPageRoute(
                         builder: (BuildContext context) {
                           return DownloadAlbumScreen(e);
                         },
@@ -121,7 +122,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
       onPressed: () async {
         await Navigator.push(
           context,
-          MaterialPageRoute(builder: (context) => const DownloadImportScreen()),
+          AppPageRoute(builder: (context) => const DownloadImportScreen()),
         );
         _load();
       },
@@ -134,7 +135,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
       onPressed: () async {
         await Navigator.push(
           context,
-          MaterialPageRoute(
+          AppPageRoute(
             builder: (context) => const DownloadsExportScreen(),
           ),
         );

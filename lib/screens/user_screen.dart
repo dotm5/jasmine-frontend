@@ -1,56 +1,423 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:jasmine/basic/commons.dart';
-import 'package:jasmine/configs/login.dart';
-import 'package:jasmine/screens/about_screen.dart';
-import 'package:jasmine/screens/comments_screen.dart';
-import 'package:jasmine/screens/components/avatar.dart';
-import 'package:jasmine/screens/local_build_screen.dart';
-import 'package:jasmine/screens/components/recommend_links_panel.dart';
-import 'package:jasmine/screens/settings_screen.dart';
-import 'package:jasmine/screens/view_log_screen.dart';
-
-import '../basic/platform.dart';
-import '../configs/daily_sign.dart';
-import '../configs/is_pro.dart';
-import 'components/badge.dart';
-import 'components/expressive_action_card.dart';
+import '../basic/commons.dart';
+import '../basic/methods.dart';
+import '../basic/navigator.dart';
+import '../basic/reading_progress.dart';
+import '../configs/login.dart';
+import 'comic_reader_screen.dart';
+import 'comic_search_screen.dart';
+import 'components/browser_bottom_sheet.dart';
+import 'components/comic_floating_search_bar.dart';
+import 'components/comic_list.dart';
+import 'components/comic_pager.dart';
+import 'components/expressive_page_transitions.dart';
+import 'components/floating_search_bar.dart';
+import 'components/reading_account_sheet.dart';
+import 'components/reading_widgets.dart';
+import 'components/types.dart';
+import 'download_album_screen.dart';
 import 'downloads_screen.dart';
 import 'favorites_screen.dart';
+import 'view_log_screen.dart';
 
 class UserScreen extends StatefulWidget {
-  const UserScreen({super.key});
-
+  const UserScreen({super.key, this.searchBarController});
+  final FloatingSearchBarController? searchBarController;
   @override
   State<UserScreen> createState() => _UserScreenState();
 }
 
 class _UserScreenState extends State<UserScreen>
-    with AutomaticKeepAliveClientMixin {
+    with AutomaticKeepAliveClientMixin, RouteAware {
   @override
   bool get wantKeepAlive => true;
+  int _tab = 0;
+  final _visited = <int>{0};
+  final _revisions = [0, 0, 0];
+  int _folder = 0;
+  String _sort = 'mr';
+  bool _opening = false;
+  late Future<ReadingResume?> _resume;
+  Future<List<DownloadAlbum>>? _downloads;
 
   @override
   void initState() {
     super.initState();
-    loginEvent.subscribe(_setState);
-    proEvent.subscribe(_setState);
-    dailySignEvent.subscribe(_setState);
+    _resume = loadReadingResume();
+    loginEvent.subscribe(_loginChanged);
+    _loadSort();
+  }
+
+  Future<void> _loadSort() async {
+    try {
+      final value = await methods.loadProperty('favorites_sort');
+      if (mounted && (value == 'mr' || value == 'mp')) {
+        setState(() {
+          _sort = value;
+          _revisions[1]++;
+        });
+      }
+    } catch (_) {
+      /* Keep the default order if local preferences are unavailable. */
+    }
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    routeObserver.subscribe(this, ModalRoute.of(context)!);
+  }
+
+  @override
+  void didPopNext() => _refresh();
+  @override
   void dispose() {
-    loginEvent.unsubscribe(_setState);
-    proEvent.unsubscribe(_setState);
-    dailySignEvent.unsubscribe(_setState);
+    routeObserver.unsubscribe(this);
+    loginEvent.unsubscribe(_loginChanged);
     super.dispose();
   }
 
-  void _setState(_) {
-    if (mounted) setState(() {});
+  void _loginChanged(_) {
+    if (mounted) {
+      setState(() {
+        _folder = 0;
+        _revisions[1]++;
+      });
+    }
   }
 
-  void _open(Widget screen) {
-    Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
+  void _refresh() {
+    if (!mounted) return;
+    setState(() {
+      _resume = loadReadingResume();
+      for (var i = 0; i < _revisions.length; i++) {
+        _revisions[i]++;
+      }
+      if (_visited.contains(2)) _downloads = methods.allDownloads();
+    });
+  }
+
+  void _open(Widget screen) =>
+      Navigator.of(context).push(AppPageRoute(builder: (_) => screen));
+
+  Future<void> _continue(ReadingResume resume) async {
+    if (_opening) return;
+    setState(() => _opening = true);
+    try {
+      Future<ChapterResponse> Function(int) loader = methods.chapter;
+      List<Series> series = [];
+      final downloads = await methods.allDownloads();
+      if (downloads.any((e) => e.id == resume.log.id && e.dlStatus == 1)) {
+        final create = await methods.downloadById(resume.log.id);
+        if (create != null &&
+            create.chapters.any((e) => e.id == resume.log.lastViewChapterId)) {
+          series =
+              create.chapters
+                  .map((e) => Series(id: e.id, name: e.name, sort: e.sort))
+                  .toList();
+          loader = (id) => loadDownloadedChapter(create, id);
+        }
+      }
+      if (!mounted) return;
+      await Navigator.of(context).push(
+        AppPageRoute(
+          settings: readerRouteSettings,
+          builder:
+              (_) => ComicReaderScreen(
+                comic: resume.comic,
+                series: series,
+                chapterId: resume.log.lastViewChapterId,
+                initRank: resume.log.lastViewPage,
+                loadChapter: loader,
+              ),
+        ),
+      );
+    } catch (error) {
+      if (mounted) defaultToast(context, '打开失败：$error');
+    } finally {
+      if (mounted) setState(() => _opening = false);
+    }
+  }
+
+  Future<void> _search() async {
+    final controller = widget.searchBarController;
+    if (controller == null) {
+      _open(const ComicSearchScreen(initKeywords: ''));
+      return;
+    }
+    try {
+      searchHistories = await methods.lastSearchHistories(20);
+    } catch (_) {
+      searchHistories = [];
+    }
+    if (mounted) controller.display(modifyInput: '');
+  }
+
+  Widget _header() => Padding(
+    padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        FutureBuilder<ReadingResume?>(
+          future: _resume,
+          builder: (context, snapshot) {
+            if (snapshot.hasError) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Row(
+                  children: [
+                    const Expanded(child: Text('阅读进度暂未加载')),
+                    TextButton(onPressed: _refresh, child: const Text('重试')),
+                  ],
+                ),
+              );
+            }
+            if (snapshot.data == null) return const SizedBox.shrink();
+            final resume = snapshot.requireData!;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 24),
+              child: ContinueReadingCard(
+                comic: resume.comic,
+                position: resume.position,
+                busy: _opening,
+                onContinue: () => _continue(resume),
+              ),
+            );
+          },
+        ),
+        SizedBox(
+          width: double.infinity,
+          child: SegmentedButton<int>(
+            showSelectedIcon: false,
+            segments: const [
+              ButtonSegment(value: 0, label: Text('最近')),
+              ButtonSegment(value: 1, label: Text('收藏')),
+              ButtonSegment(value: 2, label: Text('已下载')),
+            ],
+            selected: {_tab},
+            onSelectionChanged:
+                (selected) => setState(() {
+                  _tab = selected.single;
+                  _visited.add(_tab);
+                  if (_tab == 2) _downloads ??= methods.allDownloads();
+                }),
+          ),
+        ),
+        if (_tab == 0)
+          ReadingSectionHeading(
+            '最近浏览',
+            action: TextButton(
+              onPressed: () => _open(const ViewLogScreen()),
+              child: const Text('管理历史'),
+            ),
+          ),
+        if (_tab == 1) ...[
+          ReadingSectionHeading(
+            '我的收藏',
+            action: TextButton(
+              onPressed:
+                  loginStatus == LoginStatus.loginSuccess
+                      ? () => _open(const FavoritesScreen())
+                      : null,
+              child: const Text('管理收藏'),
+            ),
+          ),
+          if (loginStatus == LoginStatus.loginSuccess)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Wrap(
+                spacing: 8,
+                children: [
+                  ActionChip(
+                    avatar: const Icon(Icons.folder_outlined, size: 18),
+                    label: Text(
+                      _folder == 0
+                          ? '全部收藏'
+                          : favData
+                                  .where((e) => e.fid == _folder)
+                                  .map((e) => e.name)
+                                  .firstOrNull ??
+                              '文件夹',
+                    ),
+                    onPressed: () async {
+                      final value = await chooseMapDialog<int>(
+                        context,
+                        title: '选择文件夹',
+                        values: {
+                          '全部收藏': 0,
+                          for (final folder in favData) folder.name: folder.fid,
+                        },
+                      );
+                      if (value != null && mounted) {
+                        setState(() {
+                          _folder = value;
+                          _revisions[1]++;
+                        });
+                      }
+                    },
+                  ),
+                  ActionChip(
+                    avatar: const Icon(Icons.sort, size: 18),
+                    label: Text(_sort == 'mr' ? '收藏时间' : '更新时间'),
+                    onPressed: () async {
+                      final value = await chooseMapDialog<String>(
+                        context,
+                        title: '收藏排序',
+                        values: {'收藏时间': 'mr', '更新时间': 'mp'},
+                      );
+                      if (value != null && mounted) {
+                        setState(() {
+                          _sort = value;
+                          _revisions[1]++;
+                        });
+                        try {
+                          await methods.saveProperty('favorites_sort', value);
+                        } catch (error) {
+                          if (mounted) defaultToast(context, '排序偏好未保存：$error');
+                        }
+                      }
+                    },
+                  ),
+                ],
+              ),
+            ),
+        ],
+        if (_tab == 2)
+          ReadingSectionHeading(
+            '离线阅读',
+            action: TextButton(
+              onPressed: () => _open(const DownloadsScreen()),
+              child: const Text('下载管理'),
+            ),
+          ),
+      ],
+    ),
+  );
+
+  Widget _panel(int index) {
+    if (!_visited.contains(index)) return const SizedBox.shrink();
+    if (index == 1 && loginStatus != LoginStatus.loginSuccess) {
+      return ListView(
+        children: [
+          _header(),
+          ReadingEmptyState(
+            icon: Icons.bookmarks_outlined,
+            title: '登录后查看收藏',
+            message: '最近浏览和已下载内容仍可使用',
+            action: FilledButton(
+              onPressed:
+                  loginStatus == LoginStatus.logging
+                      ? null
+                      : () => loginDialog(context),
+              child: Text(
+                loginStatus == LoginStatus.logging ? '正在登录…' : '登录 / 注册',
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+    if (index == 2) {
+      return FutureBuilder<List<DownloadAlbum>>(
+        future: _downloads,
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) {
+            return ListView(
+              children: [
+                _header(),
+                if (snapshot.hasError)
+                  ReadingEmptyState(
+                    icon: Icons.error_outline,
+                    title: '下载列表加载失败',
+                    action: TextButton(
+                      onPressed: _refresh,
+                      child: const Text('重试'),
+                    ),
+                  )
+                else
+                  const Padding(
+                    padding: EdgeInsets.all(32),
+                    child: Center(child: CircularProgressIndicator()),
+                  ),
+              ],
+            );
+          }
+          final albums =
+              snapshot.requireData.where((e) => e.dlStatus == 1).toList();
+          return ComicList(
+            header: _header(),
+            data:
+                albums
+                    .map(
+                      (e) => ComicBasic(
+                        id: e.id,
+                        author: _author(e.author),
+                        description: e.description,
+                        name: e.name,
+                        image: '',
+                      ),
+                    )
+                    .toList(),
+            subtitleBuilder:
+                (comic) =>
+                    '已下载 · ${albums.firstWhere((e) => e.id == comic.id).imageCount} 页',
+            onComicTap: (comic) async {
+              await Navigator.of(context).push(
+                AppPageRoute(
+                  builder:
+                      (_) => DownloadAlbumScreen(
+                        albums.firstWhere((e) => e.id == comic.id),
+                      ),
+                ),
+              );
+            },
+            appendList:
+                albums.isEmpty
+                    ? [
+                      const ReadingEmptyState(
+                        icon: Icons.download_outlined,
+                        title: '还没有已完成的下载',
+                        message: '下载漫画后，可在这里离线阅读；进行中的任务请查看下载管理',
+                      ),
+                    ]
+                    : null,
+          );
+        },
+      );
+    }
+    return ComicPager(
+      key: ValueKey('shelf:$index:${_revisions[index]}'),
+      compact: true,
+      header: _header(),
+      emptyState: ReadingEmptyState(
+        icon: index == 0 ? Icons.history_rounded : Icons.bookmarks_outlined,
+        title: index == 0 ? '还没有浏览记录' : '这里还没有收藏',
+        message: index == 0 ? '打开一本漫画，它就会留在这里' : '将喜欢的漫画加入收藏，慢慢阅读',
+      ),
+      onPage: (page) async {
+        if (index == 0) {
+          final response = await methods.pageViewLog(page);
+          return InnerComicPage(total: response.total, list: response.content);
+        }
+        final response = await methods.favorites(_folder, page, _sort);
+        if (mounted) setState(() => favData = response.folderList);
+        return InnerComicPage(total: response.total, list: response.list);
+      },
+      longPressMenuItems:
+          index == 0
+              ? [
+                ComicLongPressMenuItem('删除浏览记录', (comic) async {
+                  try {
+                    await methods.deleteViewLogByComicId(comic.id);
+                    _refresh();
+                  } catch (error) {
+                    if (mounted) defaultToast(context, '删除失败：$error');
+                  }
+                }),
+              ]
+              : null,
+    );
   }
 
   @override
@@ -58,255 +425,51 @@ class _UserScreenState extends State<UserScreen>
     super.build(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('书架'),
+        centerTitle: false,
+        toolbarHeight: 80,
+        title: Text(
+          '书架',
+          style: Theme.of(
+            context,
+          ).textTheme.headlineLarge?.copyWith(fontWeight: FontWeight.w800),
+        ),
         actions: [
           IconButton(
-            tooltip: '功能与说明',
-            onPressed: () => _open(const LocalBuildScreen()),
-            icon: const Icon(Icons.help_outline),
+            tooltip: '刷新书架',
+            onPressed: _refresh,
+            icon: const Icon(Icons.refresh_rounded),
           ),
+          const BrowserBottomSheetAction(),
+          const ReadingAccountButton(),
           IconButton(
-            tooltip: '设置',
-            onPressed: () => _open(const SettingsScreen()),
-            icon: const Icon(Icons.settings_outlined),
+            tooltip: '搜索漫画',
+            onPressed: _search,
+            icon: const Icon(Icons.search_rounded),
           ),
-          if (normalPlatform)
-            IconButton(
-              tooltip: '关于 Jasmine',
-              onPressed: () => _open(const AboutScreen()),
-              icon: const VersionBadged(
-                child: Padding(
-                  padding: EdgeInsets.all(1),
-                  child: Icon(Icons.info_outlined),
-                ),
-              ),
-            ),
+          const SizedBox(width: 8),
         ],
       ),
       body: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final wide = constraints.maxWidth >= 840;
-            return Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 1200),
-                child: ListView(
-                  padding: EdgeInsets.all(wide ? 24 : 16),
-                  children: [
-                    if (wide)
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          SizedBox(width: 320, child: _buildAccountCard()),
-                          const SizedBox(width: 24),
-                          Expanded(child: _buildReadingEntries()),
-                        ],
-                      )
-                    else ...[
-                      _buildAccountCard(),
-                      const SizedBox(height: 24),
-                      _buildReadingEntries(),
-                    ],
-                    const SizedBox(height: 24),
-                    const RecommendLinksPanel(padding: EdgeInsets.zero),
-                  ],
-                ),
-              ),
-            );
-          },
-        ),
-      ),
-    );
-  }
-
-  Widget _buildReadingEntries() {
-    final entries = [
-      ExpressiveActionCard(
-        icon: Icons.bookmarks_rounded,
-        title: '收藏夹',
-        subtitle: '整理收藏，管理文件夹',
-        onTap: () {
-          if (loginStatus == LoginStatus.loginSuccess) {
-            _open(const FavoritesScreen());
-          } else {
-            defaultToast(context, '登录后即可使用收藏夹');
-          }
-        },
-      ),
-      ExpressiveActionCard(
-        icon: Icons.history_rounded,
-        title: '浏览历史',
-        subtitle: '找回最近浏览的漫画',
-        onTap: () => _open(const ViewLogScreen()),
-      ),
-      ExpressiveActionCard(
-        icon: Icons.download_rounded,
-        title: '下载管理',
-        subtitle: '查看进度，阅读已下载内容',
-        secondary: true,
-        onTap: () => _open(const DownloadsScreen()),
-      ),
-      ExpressiveActionCard(
-        icon: Icons.forum_rounded,
-        title: '讨论区',
-        subtitle: '浏览留言，参与交流',
-        secondary: true,
-        onTap: () => _open(const CommentsScreen()),
-      ),
-    ];
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(left: 8, bottom: 16),
-          child: Text(
-            '我的阅读',
-            style: Theme.of(
-              context,
-            ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
+        top: false,
+        bottom: false,
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1200),
+            child: IndexedStack(
+              index: _tab,
+              children: [for (var i = 0; i < 3; i++) _panel(i)],
+            ),
           ),
         ),
-        for (var i = 0; i < entries.length; i++) ...[
-          entries[i],
-          if (i != entries.length - 1) const SizedBox(height: 8),
-        ],
-      ],
-    );
-  }
-
-  Widget _buildAccountCard() {
-    final scheme = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme.apply(
-      bodyColor: scheme.onPrimaryContainer,
-      displayColor: scheme.onPrimaryContainer,
-    );
-    Widget child;
-    switch (loginStatus) {
-      case LoginStatus.notSet:
-        child = Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.account_circle_outlined,
-              size: 48,
-              color: scheme.onPrimaryContainer,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              '让喜欢的漫画有个归处',
-              textAlign: TextAlign.center,
-              style: textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '登录后可管理收藏夹和每日签到',
-              textAlign: TextAlign.center,
-              style: textTheme.bodyMedium,
-            ),
-            const SizedBox(height: 20),
-            FilledButton.icon(
-              onPressed: () => loginDialog(context),
-              icon: const Icon(Icons.login),
-              label: const Text('登录 / 注册'),
-            ),
-          ],
-        );
-        break;
-      case LoginStatus.logging:
-        child = const Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SizedBox.square(
-              dimension: 32,
-              child: CircularProgressIndicator(strokeWidth: 3),
-            ),
-            SizedBox(height: 16),
-            Text('正在登录…'),
-          ],
-        );
-        break;
-      case LoginStatus.loginSuccess:
-        child = Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Avatar(selfInfo.photo),
-            const SizedBox(height: 12),
-            Text(
-              selfInfo.username,
-              textAlign: TextAlign.center,
-              style: textTheme.titleLarge,
-            ),
-            const SizedBox(height: 12),
-            OutlinedButton.icon(
-              style: OutlinedButton.styleFrom(
-                foregroundColor: scheme.onPrimaryContainer,
-                side: BorderSide(color: scheme.onPrimaryContainer),
-              ),
-              onPressed:
-                  dailySignStatus == DailySignStatus.checking
-                      ? null
-                      : () => checkDailySignStatus(context, toast: true),
-              icon: Icon(
-                dailySignStatus == DailySignStatus.signed
-                    ? Icons.check_circle_outline
-                    : Icons.event_available_outlined,
-              ),
-              label: Text(dailySignStatusLabel()),
-            ),
-          ],
-        );
-        break;
-      case LoginStatus.loginField:
-        child = Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.person_off_outlined, size: 40, color: scheme.error),
-            const SizedBox(height: 12),
-            Text('登录未完成', style: textTheme.titleMedium),
-            const SizedBox(height: 8),
-            const Text('请检查网络或账号信息后重试', textAlign: TextAlign.center),
-            const SizedBox(height: 16),
-            FilledButton(
-              onPressed: () => loginDialog(context),
-              child: const Text('重新登录'),
-            ),
-            TextButton(
-              style: TextButton.styleFrom(
-                foregroundColor: scheme.onPrimaryContainer,
-              ),
-              onPressed:
-                  () => showDialog<void>(
-                    context: context,
-                    builder:
-                        (context) => AlertDialog(
-                          title: const Text('登录错误详情'),
-                          content: SingleChildScrollView(
-                            child: SelectableText(loginMessage),
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.of(context).pop(),
-                              child: const Text('关闭'),
-                            ),
-                          ],
-                        ),
-                  ),
-              child: const Text('查看错误详情'),
-            ),
-          ],
-        );
-        break;
-    }
-    return Card(
-      margin: EdgeInsets.zero,
-      elevation: 0,
-      color: scheme.primaryContainer,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
-        child: DefaultTextStyle(style: textTheme.bodyMedium!, child: child),
       ),
     );
+  }
+}
+
+String _author(String value) {
+  try {
+    return (jsonDecode(value) as List).join(' / ');
+  } catch (_) {
+    return value;
   }
 }

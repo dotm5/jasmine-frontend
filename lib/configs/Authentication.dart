@@ -1,3 +1,4 @@
+import 'package:jasmine/screens/components/expressive_page_transitions.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -32,7 +33,7 @@ Future<bool> verifyAuthentication(BuildContext context) async {
   }
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
     return await Navigator.of(context).push(
-            MaterialPageRoute(builder: (context) => const VerifyPassword())) ==
+            AppPageRoute(builder: (context) => const VerifyPassword())) ==
         true;
   }
   return false;
@@ -62,7 +63,7 @@ Widget authenticationSetting() {
         title: const Text("设置应用程序密码"),
         onTap: () async {
           Navigator.of(context).push(
-              MaterialPageRoute(builder: (context) => const SetPassword()));
+              AppPageRoute(builder: (context) => const SetPassword()));
         },
       );
     });

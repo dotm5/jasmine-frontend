@@ -1,3 +1,4 @@
+import 'package:jasmine/screens/components/expressive_page_transitions.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:jasmine/basic/commons.dart';
@@ -158,7 +159,7 @@ Widget _buildComment(
       }
       if (comment.AID != null) {
         Navigator.of(context).push(
-          MaterialPageRoute(
+          AppPageRoute(
             builder: (context) => _CommentChildrenScreen(
               aid: comment.AID!,
               mode: mode,
@@ -404,7 +405,7 @@ class _ComicCommentItemState extends State<_ComicCommentItem> {
                                 recognizer: TapGestureRecognizer()
                                   ..onTap = () {
                                     Navigator.of(context).push(
-                                      MaterialPageRoute(
+                                      AppPageRoute(
                                         builder: (context) => TextPreviewScreen(
                                           text: content,
                                         ),
@@ -425,7 +426,7 @@ class _ComicCommentItemState extends State<_ComicCommentItem> {
                         GestureDetector(
                           onTap: () {
                             if (comment.AID != null) {
-                              Navigator.push(context, MaterialPageRoute(
+                              Navigator.push(context, AppPageRoute(
                                   builder: (BuildContext context) {
                                 return ComicInfoScreen(comment.AID!, null);
                               }));

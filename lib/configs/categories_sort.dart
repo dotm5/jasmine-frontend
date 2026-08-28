@@ -1,3 +1,4 @@
+import 'package:jasmine/screens/components/expressive_page_transitions.dart';
 import 'dart:convert';
 
 import 'package:event/event.dart';
@@ -56,7 +57,7 @@ Future<dynamic> saveCategoriesSort(List<int> categories) async {
 Widget categoriesSortSetting(BuildContext context) {
   return ListTile(
     onTap: () {
-      Navigator.of(context).push(MaterialPageRoute(
+      Navigator.of(context).push(AppPageRoute(
         builder: (BuildContext context) {
           return const CategoriesSortScreen();
         },

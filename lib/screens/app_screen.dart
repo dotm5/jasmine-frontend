@@ -1,3 +1,4 @@
+import 'package:jasmine/screens/components/expressive_page_transitions.dart';
 import 'package:flutter/material.dart';
 import 'package:jasmine/configs/versions.dart';
 import 'package:jasmine/screens/browser_screen.dart';
@@ -23,14 +24,14 @@ class _AppScreenState extends State<AppScreen> {
     AppScreenData(
       BrowserScreenWrapper(searchBarController: _searchBarController),
       '浏览',
-      const Icon(Icons.menu_book_outlined),
-      const Icon(Icons.menu_book),
+      const Icon(Icons.explore_outlined),
+      const Icon(Icons.explore_rounded),
     ),
-    const AppScreenData(
-      UserScreen(),
+    AppScreenData(
+      UserScreen(searchBarController: _searchBarController),
       '书架',
-      VersionBadged(child: Icon(Icons.bookmarks_outlined)),
-      VersionBadged(child: Icon(Icons.bookmarks)),
+      const VersionBadged(child: Icon(Icons.collections_bookmark_outlined)),
+      const VersionBadged(child: Icon(Icons.collections_bookmark_rounded)),
     ),
   ];
 
@@ -70,7 +71,7 @@ class _AppScreenState extends State<AppScreen> {
     return ComicFloatingSearchBarScreen(
       onQuery: (value) {
         Navigator.of(context).push(
-          MaterialPageRoute(
+          AppPageRoute(
             builder: (_) {
               return ComicSearchScreen(initKeywords: value);
             },

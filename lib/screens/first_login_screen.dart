@@ -1,3 +1,4 @@
+import 'package:jasmine/screens/components/expressive_page_transitions.dart';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -80,7 +81,7 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> {
           _logging = false;
         });
       } else {
-        Navigator.pushReplacement(context, MaterialPageRoute(
+        Navigator.pushReplacement(context, AppPageRoute(
           builder: (BuildContext context) {
             return const AppScreen();
           },

@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 
 import '../basic/commons.dart';
 import '../basic/methods.dart';
+import '../screens/components/expressive_page_transitions.dart';
 
 const _seedColor = Color(0xFF6750A4);
 
@@ -273,7 +274,7 @@ ThemeData _buildAppTheme(ColorScheme scheme, Brightness brightness) {
     ),
     pageTransitionsTheme: const PageTransitionsTheme(
       builders: {
-        TargetPlatform.android: PredictiveBackPageTransitionsBuilder(),
+        TargetPlatform.android: ExpressivePageTransitionsBuilder(),
         TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
         TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
         TargetPlatform.windows: ZoomPageTransitionsBuilder(),

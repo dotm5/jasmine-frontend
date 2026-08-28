@@ -6,6 +6,7 @@ import 'package:jasmine/screens/components/expressive_action_card.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jasmine/screens/components/floating_search_bar.dart';
 import 'package:jasmine/configs/theme.dart' as app_theme;
+import 'package:jasmine/screens/components/expressive_page_transitions.dart';
 
 void main() {
   testWidgets(
@@ -238,7 +239,7 @@ void main() {
       ]) {
         expect(
           theme.pageTransitionsTheme.builders[TargetPlatform.android],
-          isA<PredictiveBackPageTransitionsBuilder>(),
+          isA<ExpressivePageTransitionsBuilder>(),
         );
         expect(
           theme.filledButtonTheme.style!.minimumSize!.resolve({})!.height,

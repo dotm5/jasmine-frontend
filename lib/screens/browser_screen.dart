@@ -1,107 +1,122 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
-import 'package:jasmine/basic/methods.dart';
-import 'package:jasmine/screens/components/comic_pager.dart';
-import 'package:jasmine/screens/components/content_builder.dart';
-import 'package:jasmine/screens/components/floating_search_bar.dart';
-
+import '../basic/commons.dart';
+import '../basic/comic_seal.dart';
+import '../basic/methods.dart';
 import '../configs/categories_sort.dart';
 import '../configs/login.dart';
+import 'comic_info_screen.dart';
 import 'components/browser_bottom_sheet.dart';
-import 'components/actions.dart';
 import 'components/comic_floating_search_bar.dart';
-import 'components/content_error.dart';
-import 'components/content_loading.dart';
+import 'components/comic_pager.dart';
+import 'components/expressive_page_transitions.dart';
+import 'components/floating_search_bar.dart';
+import 'components/reading_account_sheet.dart';
+import 'components/reading_widgets.dart';
 import 'week_screen.dart';
 
 class BrowserScreenWrapper extends StatefulWidget {
+  const BrowserScreenWrapper({super.key, required this.searchBarController});
   final FloatingSearchBarController searchBarController;
-
-  const BrowserScreenWrapper({Key? key, required this.searchBarController})
-      : super(key: key);
-
   @override
-  State<StatefulWidget> createState() => _BrowserScreenWrapperState();
+  State<BrowserScreenWrapper> createState() => _BrowserScreenWrapperState();
 }
 
 class _BrowserScreenWrapperState extends State<BrowserScreenWrapper> {
   @override
   void initState() {
-    loginEvent.subscribe(_setState);
     super.initState();
+    loginEvent.subscribe(_refresh);
   }
 
   @override
   void dispose() {
-    loginEvent.unsubscribe(_setState);
+    loginEvent.unsubscribe(_refresh);
     super.dispose();
   }
 
-  void _setState(_) {
-    setState(() {});
+  void _refresh(_) {
+    if (mounted) setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
-    switch (loginStatus) {
-      case LoginStatus.loginSuccess:
-        return BrowserScreen(searchBarController: widget.searchBarController);
-      case LoginStatus.loginField:
-        return ContentError(
-          error: "请先登录",
-          stackTrace: StackTrace.current,
-          onRefresh: () async {},
-        );
-      case LoginStatus.logging:
-        return const ContentLoading(
-          label: "登录中",
-        );
-      case LoginStatus.notSet:
-        return ContentError(
-          error: "请先登录",
-          stackTrace: StackTrace.current,
-          onRefresh: () async {},
-        );
+    if (loginStatus == LoginStatus.loginSuccess) {
+      return BrowserScreen(searchBarController: widget.searchBarController);
     }
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('浏览'),
+        centerTitle: false,
+        actions: const [ReadingAccountButton()],
+      ),
+      body: Center(
+        child: SingleChildScrollView(
+          child: ReadingEmptyState(
+            icon: Icons.auto_stories_outlined,
+            title: loginStatus == LoginStatus.logging ? '正在登录…' : '发现下一本喜欢的漫画',
+            message: '登录后浏览在线内容，本地历史与下载仍可在书架查看',
+            action:
+                loginStatus == LoginStatus.logging
+                    ? const CircularProgressIndicator()
+                    : FilledButton.icon(
+                      onPressed: () => loginDialog(context),
+                      icon: const Icon(Icons.login),
+                      label: const Text('登录 / 注册'),
+                    ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
 class BrowserScreen extends StatefulWidget {
+  const BrowserScreen({super.key, required this.searchBarController});
   final FloatingSearchBarController searchBarController;
-
-  const BrowserScreen({Key? key, required this.searchBarController})
-      : super(key: key);
-
   @override
-  State<StatefulWidget> createState() => _BrowserScreenState();
+  State<BrowserScreen> createState() => _BrowserScreenState();
 }
 
 class _BrowserScreenState extends State<BrowserScreen>
     with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
-
   late Future<CategoriesResponse> _future;
-  late Key _key;
-  String _slug = "";
+  late Future<List<ComicSimple>> _weekFuture;
+  String _slug = '';
   SortBy _sortBy = sortByDefault;
+  int _revision = 0;
 
   Future<CategoriesResponse> _categories() async {
-    final rsp = await methods.categories();
-    blockStore = rsp.blocks;
-    sortCategories(rsp.categories);
-    return rsp;
+    final response = await methods.categories();
+    blockStore = response.blocks;
+    sortCategories(response.categories);
+    return response;
+  }
+
+  Future<List<ComicSimple>> _week() async {
+    final data = await methods.week(0);
+    if (data.categories.isEmpty || data.types.isEmpty) return [];
+    final response = await methods.weekFilter(
+      data.categories.first.id,
+      data.types.last.id,
+      1,
+    );
+    for (final comic in response.list) {
+      comic.sealed = comic.sealed || matchComicSealedByRules(comic);
+    }
+    return response.list.take(8).toList();
   }
 
   @override
   void initState() {
-    _future = _categories();
-    _key = UniqueKey();
     super.initState();
+    _future = _categories();
+    _weekFuture = _week();
+    // Attach the error handler immediately, even while categories are loading.
+    _weekFuture.ignore();
     categoriesSortEvent.subscribe(_resort);
   }
-
 
   @override
   void dispose() {
@@ -109,11 +124,139 @@ class _BrowserScreenState extends State<BrowserScreen>
     super.dispose();
   }
 
-  _resort(_) {
-    setState(() {
-      _future = _categories();
-      _key = UniqueKey();
-    });
+  void _resort(_) {
+    if (mounted) {
+      setState(() {
+        _future = _categories();
+        _revision++;
+      });
+    }
+  }
+
+  Future<void> _search() async {
+    try {
+      searchHistories = await methods.lastSearchHistories(20);
+    } catch (_) {
+      searchHistories = [];
+    }
+    if (mounted) widget.searchBarController.display(modifyInput: '');
+  }
+
+  void _openWeek() => Navigator.of(
+    context,
+  ).push(AppPageRoute(builder: (_) => const WeekScreen()));
+
+  Widget _header(List<Categories> categories) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ReadingSearchEntry(onTap: _search),
+          const SizedBox(height: 16),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                for (final category in categories)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ChoiceChip(
+                      showCheckmark: false,
+                      label: Text(category.name),
+                      selected: _slug == category.slug,
+                      onSelected: (_) => setState(() => _slug = category.slug),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          ReadingSectionHeading(
+            '每周必看',
+            action: TextButton(
+              onPressed: _openWeek,
+              child: const Text('查看全部 ›'),
+            ),
+          ),
+          FutureBuilder<List<ComicSimple>>(
+            future: _weekFuture,
+            builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                return Row(
+                  children: [
+                    const Expanded(child: Text('每周内容暂未加载')),
+                    TextButton(
+                      onPressed: () => setState(() => _weekFuture = _week()),
+                      child: const Text('重试'),
+                    ),
+                  ],
+                );
+              }
+              if (!snapshot.hasData) {
+                return const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 24),
+                  child: LinearProgressIndicator(),
+                );
+              }
+              if (snapshot.requireData.isEmpty) {
+                return const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 16),
+                  child: Text('本期暂无内容，试试其他期数'),
+                );
+              }
+              return LayoutBuilder(
+                builder: (context, constraints) {
+                  final width = ((constraints.maxWidth - 24) / 3).clamp(
+                    104.0,
+                    148.0,
+                  );
+                  final textScale =
+                      MediaQuery.textScalerOf(context).scale(14) / 14;
+                  return SizedBox(
+                    height: width * 4 / 3 + 16 + 62 * textScale,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: snapshot.requireData.length,
+                      separatorBuilder: (_, __) => const SizedBox(width: 12),
+                      itemBuilder: (context, index) {
+                        final comic = snapshot.requireData[index];
+                        return SizedBox(
+                          width: width,
+                          child: ReadingCoverTile(
+                            comic: comic,
+                            subtitle: '',
+                            onTap:
+                                () => Navigator.of(context).push(
+                                  AppPageRoute(
+                                    builder:
+                                        (_) => ComicInfoScreen(comic.id, comic),
+                                  ),
+                                ),
+                          ),
+                        );
+                      },
+                    ),
+                  );
+                },
+              );
+            },
+          ),
+          ReadingSectionHeading(
+            '发现漫画',
+            action: TextButton.icon(
+              onPressed: () async {
+                final selected = await chooseSortBy(context);
+                if (selected != null && mounted) {
+                  setState(() => _sortBy = selected);
+                }
+              },
+              icon: const Icon(Icons.sort_rounded, size: 18),
+              label: Text(_sortBy.toString()),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -121,130 +264,84 @@ class _BrowserScreenState extends State<BrowserScreen>
     super.build(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text("浏览"),
+        centerTitle: false,
+        toolbarHeight: 80,
+        title: Text(
+          '浏览',
+          style: Theme.of(
+            context,
+          ).textTheme.headlineLarge?.copyWith(fontWeight: FontWeight.w800),
+        ),
         actions: [
           IconButton(
-            onPressed: () async {
-              Navigator.push(context, MaterialPageRoute(builder: (context) => const WeekScreen()));
-            },
-            icon: const Icon(Icons.calendar_month),
-          ),
-          IconButton(
-            onPressed: () async {
-              searchHistories = await methods.lastSearchHistories(20);
-              widget.searchBarController.display(modifyInput: "");
-            },
-            icon: const Icon(Icons.search),
+            tooltip: '刷新',
+            icon: const Icon(Icons.refresh_rounded),
+            onPressed:
+                () => setState(() {
+                  _future = _categories();
+                  _weekFuture = _week();
+                  _weekFuture.ignore();
+                  _revision++;
+                }),
           ),
           const BrowserBottomSheetAction(),
+          const ReadingAccountButton(),
+          const SizedBox(width: 8),
         ],
       ),
-      body: ContentBuilder(
-        key: _key,
-        future: _future,
-        onRefresh: () async {
-          setState(() {
-            _future = _categories();
-            _key = UniqueKey();
-          });
-        },
-        successBuilder: (
-          BuildContext context,
-          AsyncSnapshot<CategoriesResponse> snapshot,
-        ) {
-          final categories = snapshot.requireData.categories;
-          if (_slug.isEmpty && categories.isNotEmpty) {
-            _slug = categories[0].slug;
-          }
-          return Column(children: [
-            SizedBox(
-              height: 56,
-              child: Container(
-                padding: const EdgeInsets.only(top: 8),
-                color: Theme.of(context).appBarTheme.backgroundColor,
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: _MTabBar(
-                        categories,
-                        (index) {
-                          setState(() {
-                            _slug = categories[index].slug;
-                          });
-                        },
-                      ),
-                    ),
-                    buildOrderSwitch(context, _sortBy, (value) {
-                      setState(() {
-                        _sortBy = value;
-                      });
-                    }),
-                  ],
-                ),
-              ),
-            ),
-            Expanded(
-              child: ComicPager(
-                key: Key("$_slug:$_sortBy"),
-                onPage: (int page) async {
-                  final response = await methods.comics(_slug, _sortBy, page);
-                  return InnerComicPage(
-                    total: response.total,
-                    list: response.content,
+      body: SafeArea(
+        top: false,
+        bottom: false,
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1200),
+            child: FutureBuilder<CategoriesResponse>(
+              future: _future,
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) {
+                  return ListView(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    children: [
+                      ReadingSearchEntry(onTap: _search),
+                      if (snapshot.hasError)
+                        ReadingEmptyState(
+                          icon: Icons.cloud_off_outlined,
+                          title: '分类加载失败',
+                          action: FilledButton(
+                            onPressed: () => _resort(null),
+                            child: const Text('重试'),
+                          ),
+                        )
+                      else
+                        const Padding(
+                          padding: EdgeInsets.all(32),
+                          child: Center(child: CircularProgressIndicator()),
+                        ),
+                    ],
                   );
-                },
-              ),
-            ),
-          ]);
-        },
-      ),
-    );
-  }
-}
-
-class _MTabBar extends StatefulWidget {
-  final List<Categories> categories;
-  final void Function(int index) onTab;
-
-  const _MTabBar(this.categories, this.onTab);
-
-  @override
-  State<StatefulWidget> createState() => _MTabBarState();
-}
-
-class _MTabBarState extends State<_MTabBar>
-    with SingleTickerProviderStateMixin {
-  late final TabController _tabController =
-      TabController(length: widget.categories.length, vsync: this);
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 50,
-      child: TabBar(
-          onTap: widget.onTab,
-          controller: _tabController,
-          isScrollable: true,
-          indicatorSize: TabBarIndicatorSize.tab,
-          padding: const EdgeInsets.only(left: 10, right: 10),
-          indicator: BoxDecoration(
-            color: Colors.grey.shade500.withOpacity(.3),
-            borderRadius: const BorderRadius.only(
-              topLeft: Radius.circular(5),
-              topRight: Radius.circular(5),
+                }
+                final categories = snapshot.requireData.categories;
+                if (!categories.any((category) => category.slug == _slug) &&
+                    categories.isNotEmpty) {
+                  _slug = categories.first.slug;
+                }
+                return ComicPager(
+                  key: ValueKey('browse:$_slug:$_sortBy:$_revision'),
+                  compact: true,
+                  header: _header(categories),
+                  onPage: (page) async {
+                    final response = await methods.comics(_slug, _sortBy, page);
+                    return InnerComicPage(
+                      total: response.total,
+                      list: response.content,
+                    );
+                  },
+                );
+              },
             ),
           ),
-          tabs: widget.categories
-              .map((e) => Tab(
-                    text: e.name,
-                  ))
-              .toList()),
+        ),
+      ),
     );
   }
 }

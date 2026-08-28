@@ -1,479 +1,207 @@
 import 'package:flutter/material.dart';
-import 'package:jasmine/basic/entities.dart';
-import 'package:jasmine/configs/pager_column_number.dart';
-import 'package:jasmine/configs/pager_cover_rate.dart';
-import 'package:jasmine/configs/pager_view_mode.dart';
-import 'package:jasmine/screens/comic_info_screen.dart';
-import 'package:jasmine/screens/components/types.dart';
-
-import '../../basic/commons.dart';
+import '../../basic/entities.dart';
+import '../../configs/pager_column_number.dart';
+import '../../configs/pager_cover_rate.dart';
+import '../../configs/pager_view_mode.dart';
+import '../comic_info_screen.dart';
 import 'comic_info_card.dart';
-import 'images.dart';
+import 'expressive_page_transitions.dart';
+import 'reading_widgets.dart';
+import 'types.dart';
 
 class ComicList extends StatefulWidget {
-  final bool inScroll;
-  final List<ComicBasic> data;
-  final List<Widget>? appendList;
-  final ScrollController? controller;
-  final Function? onScroll;
-  final List<ComicLongPressMenuItem>? longPressMenuItems;
-
   const ComicList({
-    Key? key,
+    super.key,
     required this.data,
     this.appendList,
     this.controller,
     this.inScroll = false,
     this.onScroll,
     this.longPressMenuItems,
-  }) : super(key: key);
+    this.header,
+    this.onReturn,
+    this.onComicTap,
+    this.subtitleBuilder,
+  });
+
+  final bool inScroll;
+  final List<ComicBasic> data;
+  final List<Widget>? appendList;
+  final ScrollController? controller;
+  final Function? onScroll;
+  final List<ComicLongPressMenuItem>? longPressMenuItems;
+  final Widget? header;
+  final VoidCallback? onReturn;
+  final Future<void> Function(ComicBasic)? onComicTap;
+  final String? Function(ComicBasic)? subtitleBuilder;
 
   @override
-  State<StatefulWidget> createState() => _ComicListState();
+  State<ComicList> createState() => _ComicListState();
 }
 
 class _ComicListState extends State<ComicList> {
-  bool _isSealed(ComicBasic comic) {
-    return comic is ComicSimple && comic.sealed;
-  }
-
-  Widget _buildSealedCoverPlaceholder({required BoxConstraints constraints}) {
-    return Container(
-      color: Colors.black12,
-      child: Center(
-        child: Icon(
-          Icons.visibility_off_outlined,
-          color: Colors.grey.shade600,
-          size: 26,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCoverByRate({
-    required ComicBasic comic,
-    required BoxConstraints constraints,
-    required int index,
-  }) {
-    if (_isSealed(comic)) {
-      return _buildSealedCoverPlaceholder(constraints: constraints);
-    }
-    switch (currentPagerCoverRate) {
-      case PagerCoverRate.rate3x4:
-        return JM3x4Cover(
-          comicId: comic.id,
-          width: constraints.maxWidth,
-          height: constraints.maxHeight,
-          longPressMenuItems: _longPressImageCallback(index),
-        );
-      case PagerCoverRate.rateSquare:
-        return JMSquareCover(
-          comicId: comic.id,
-          width: constraints.maxWidth,
-          height: constraints.maxHeight,
-          longPressMenuItems: _longPressImageCallback(index),
-        );
-    }
-  }
-
-  Widget _buildInfoCard(ComicBasic comic) {
-    if (_isSealed(comic)) {
-      return Container(
-        padding: const EdgeInsets.only(top: 5, bottom: 5, left: 10, right: 10),
-        decoration: BoxDecoration(
-          border: Border(
-            bottom: BorderSide(
-              color: Theme.of(context).dividerColor,
-            ),
-          ),
-        ),
-        child: Row(
-          children: [
-            SizedBox(
-              width: 100 * 3 / 4,
-              height: 100,
-              child: Card(
-                shape: coverShape,
-                clipBehavior: Clip.antiAlias,
-                child: _buildSealedCoverPlaceholder(
-                  constraints: const BoxConstraints(),
-                ),
-              ),
-            ),
-            Container(width: 10),
-            Expanded(
-              child: Text(
-                comic.name,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-    return ComicInfoCard(comic);
-  }
-
   @override
   void initState() {
-    currentPagerViewModeEvent.subscribe(_setState);
-    pageColumnEvent.subscribe(_setState);
-    pagerCoverRateEvent.subscribe(_setState);
     super.initState();
+    currentPagerViewModeEvent.subscribe(_update);
+    pageColumnEvent.subscribe(_update);
+    pagerCoverRateEvent.subscribe(_update);
   }
 
   @override
   void dispose() {
-    currentPagerViewModeEvent.unsubscribe(_setState);
-    pageColumnEvent.unsubscribe(_setState);
-    pagerCoverRateEvent.unsubscribe(_setState);
+    currentPagerViewModeEvent.unsubscribe(_update);
+    pageColumnEvent.unsubscribe(_update);
+    pagerCoverRateEvent.unsubscribe(_update);
     super.dispose();
   }
 
-  _setState(_) {
-    setState(() {});
+  void _update(_) {
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _open(ComicBasic comic) async {
+    if (widget.onComicTap != null) {
+      await widget.onComicTap!(comic);
+    } else {
+      await Navigator.of(
+        context,
+      ).push(AppPageRoute(builder: (_) => ComicInfoScreen(comic.id, comic)));
+    }
+    if (mounted) widget.onReturn?.call();
+  }
+
+  VoidCallback? _menu(ComicBasic comic) {
+    final items = widget.longPressMenuItems;
+    if (items == null || items.isEmpty) return null;
+    return () async {
+      final selected = await showModalBottomSheet<ComicLongPressMenuItem>(
+        context: context,
+        showDragHandle: true,
+        builder:
+            (context) => SafeArea(
+              top: false,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (final item in items)
+                    ListTile(
+                      title: Text(item.title),
+                      onTap: () => Navigator.pop(context, item),
+                    ),
+                ],
+              ),
+            ),
+      );
+      if (selected != null && mounted) selected.onChoose(comic);
+    };
+  }
+
+  Widget _tile(int index) {
+    final comic = widget.data[index];
+    final sealed = comic is ComicSimple && comic.sealed;
+    if (currentPagerViewMode == PagerViewMode.info && !sealed) {
+      return InkWell(
+        onTap: () => _open(comic),
+        onLongPress: _menu(comic),
+        child: ComicInfoCard(comic),
+      );
+    }
+    return ReadingCoverTile(
+      key: ValueKey('comic:${comic.id}:$index'),
+      comic: comic,
+      onTap: () => _open(comic),
+      onLongPress: _menu(comic),
+      square: currentPagerCoverRate == PagerCoverRate.rateSquare,
+      showTitle: currentPagerViewMode != PagerViewMode.cover,
+      titleOverlay: currentPagerViewMode == PagerViewMode.titleInCover,
+      subtitle: widget.subtitleBuilder?.call(comic),
+      imageMenuItems:
+          widget.longPressMenuItems
+              ?.map(
+                (item) =>
+                    LongPressMenuItem(item.title, () => item.onChoose(comic)),
+              )
+              .toList(),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    switch (currentPagerViewMode) {
-      case PagerViewMode.cover:
-        return _buildCoverMode();
-      case PagerViewMode.info:
-        return _buildInfoMode();
-      case PagerViewMode.titleInCover:
-        return _buildTitleInCoverMode();
-      case PagerViewMode.titleAndCover:
-        return _buildTitleAndCoverMode();
-    }
-  }
-
-  Widget _buildCoverMode() {
-    List<Widget> widgets = [];
-    for (var i = 0; i < widget.data.length; i++) {
-      final sealed = _isSealed(widget.data[i]);
-      widgets.add(GestureDetector(
-        onTap: sealed
-            ? null
-            : () {
-                _pushToComicInfo(widget.data[i]);
-              },
-        onLongPress: sealed ? null : _longPressCallback(i),
-        child: Card(
-          shape: coverShape,
-          clipBehavior: Clip.antiAlias,
-          child: LayoutBuilder(
-            builder: (BuildContext context, BoxConstraints constraints) {
-              return _buildCoverByRate(
-                comic: widget.data[i],
-                constraints: constraints,
-                index: i,
-              );
-            },
-          ),
-        ),
-      ));
-    }
-    if (widget.appendList != null) {
-      widgets.addAll(widget.appendList!);
-    }
-    late final double childAspectRatio;
-    switch (currentPagerCoverRate) {
-      case PagerCoverRate.rate3x4:
-        childAspectRatio = 3 / 4;
-        break;
-      case PagerCoverRate.rateSquare:
-        childAspectRatio = 1;
-        break;
-    }
-    if (widget.inScroll) {
-      var columnWidth = MediaQuery.of(context).size.width / pagerColumnNumber;
-      var wrap = Wrap(
-        alignment: WrapAlignment.spaceAround,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        runAlignment: WrapAlignment.spaceBetween,
-        children: widgets
-            .map((e) => SizedBox(
-                  width: columnWidth,
-                  height: columnWidth / childAspectRatio,
-                  child: e,
-                ))
-            .toList(),
-      );
-      return wrap;
-    }
-    final view = GridView.count(
-      childAspectRatio: childAspectRatio,
-      crossAxisCount: pagerColumnNumber,
-      controller: widget.controller,
-      physics: const AlwaysScrollableScrollPhysics(),
-      children: widgets,
-    );
-    return NotificationListener(
-      child: view,
-      onNotification: (scrollNotification) {
-        widget.onScroll?.call();
-        return true;
-      },
-    );
-  }
-
-  Widget _buildInfoMode() {
-    List<Widget> widgets = [];
-    for (var i = 0; i < widget.data.length; i++) {
-      final sealed = _isSealed(widget.data[i]);
-      widgets.add(GestureDetector(
-        onTap: sealed
-            ? null
-            : () {
-                _pushToComicInfo(widget.data[i]);
-              },
-        onLongPress: sealed ? null : _longPressCallback(i),
-        child: _buildInfoCard(widget.data[i]),
-      ));
-    }
-    if (widget.appendList != null) {
-      widgets.addAll(widget.appendList!);
-    }
-    if (widget.inScroll) {
-      return Column(children: widgets);
-    }
-    final view = ListView(
-      controller: widget.controller,
-      physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.only(top: 10, bottom: 10),
-      children: widgets,
-    );
-    return NotificationListener(
-      child: view,
-      onNotification: (scrollNotification) {
-        widget.onScroll?.call();
-        return true;
-      },
-    );
-  }
-
-  Widget _buildTitleInCoverMode() {
-    List<Widget> widgets = [];
-    for (var i = 0; i < widget.data.length; i++) {
-      final sealed = _isSealed(widget.data[i]);
-      widgets.add(GestureDetector(
-        onTap: sealed
-            ? null
-            : () {
-                _pushToComicInfo(widget.data[i]);
-              },
-        child: Card(
-          shape: coverShape,
-          clipBehavior: Clip.antiAlias,
-          child: LayoutBuilder(
-            builder: (BuildContext context, BoxConstraints constraints) {
-              final image = _buildCoverByRate(
-                comic: widget.data[i],
-                constraints: constraints,
-                index: i,
-              );
-              return Stack(
-                children: [
-                  image,
-                  Align(
-                    alignment: Alignment.bottomCenter,
-                    child: Container(
-                      padding: const EdgeInsets.all(3),
-                      color: Colors.black.withAlpha(180),
-                      width: constraints.maxWidth,
-                      child: Text(
-                        "${widget.data[i].name}\n",
-                        maxLines: 2,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          height: 1.3,
-                        ),
-                        strutStyle: const StrutStyle(
-                          height: 1.3,
-                        ),
-                      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
+        final columns = readingGridColumns(width, scale, pagerColumnNumber);
+        final cardWidth = (width - 32 - 16 * (columns - 1)) / columns;
+        final square = currentPagerCoverRate == PagerCoverRate.rateSquare;
+        final withCaption = currentPagerViewMode == PagerViewMode.titleAndCover;
+        final extent =
+            cardWidth * (square ? 1 : 4 / 3) +
+            (withCaption ? 16 + 62 * scale : 0);
+        final slivers = <Widget>[
+          if (widget.header != null) SliverToBoxAdapter(child: widget.header),
+          if (currentPagerViewMode == PagerViewMode.info)
+            SliverList(
+              delegate: SliverChildBuilderDelegate((context, index) {
+                if (widget.data[index] is ComicSimple &&
+                    (widget.data[index] as ComicSimple).sealed) {
+                  return ListTile(
+                    leading: const Icon(Icons.visibility_off_outlined),
+                    title: Text(
+                      widget.data[index].name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                ],
-              );
-            },
+                  );
+                }
+                return _tile(index);
+              }, childCount: widget.data.length),
+            )
+          else
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              sliver: SliverGrid(
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: columns,
+                  mainAxisExtent: extent,
+                  crossAxisSpacing: 16,
+                  mainAxisSpacing: 8,
+                ),
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) => _tile(index),
+                  childCount: widget.data.length,
+                ),
+              ),
+            ),
+          if (widget.appendList != null)
+            SliverList(delegate: SliverChildListDelegate(widget.appendList!)),
+          const SliverToBoxAdapter(child: SizedBox(height: 16)),
+        ];
+        return NotificationListener<ScrollNotification>(
+          onNotification: (notification) {
+            if (notification.depth == 0) widget.onScroll?.call();
+            return false;
+          },
+          child: CustomScrollView(
+            controller: widget.controller,
+            shrinkWrap: widget.inScroll,
+            primary: false,
+            physics:
+                widget.inScroll
+                    ? const NeverScrollableScrollPhysics()
+                    : const AlwaysScrollableScrollPhysics(),
+            slivers: slivers,
           ),
-        ),
-      ));
-    }
-    if (widget.appendList != null) {
-      widgets.addAll(widget.appendList!);
-    }
-    late final double childAspectRatio;
-    switch (currentPagerCoverRate) {
-      case PagerCoverRate.rate3x4:
-        childAspectRatio = 3 / 4;
-        break;
-      case PagerCoverRate.rateSquare:
-        childAspectRatio = 1;
-        break;
-    }
-    if (widget.inScroll) {
-      var columnWidth = MediaQuery.of(context).size.width / pagerColumnNumber;
-      var wrap = Wrap(
-        alignment: WrapAlignment.spaceAround,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        runAlignment: WrapAlignment.spaceBetween,
-        children: widgets
-            .map((e) => SizedBox(
-                  width: columnWidth,
-                  height: columnWidth / childAspectRatio,
-                  child: e,
-                ))
-            .toList(),
-      );
-      return wrap;
-    }
-    final view = GridView.count(
-      childAspectRatio: childAspectRatio,
-      crossAxisCount: pagerColumnNumber,
-      controller: widget.controller,
-      physics: const AlwaysScrollableScrollPhysics(),
-      children: widgets,
-    );
-    return NotificationListener(
-      child: view,
-      onNotification: (scrollNotification) {
-        widget.onScroll?.call();
-        return true;
+        );
       },
     );
   }
+}
 
-  Widget _buildTitleAndCoverMode() {
-    final mq = MediaQuery.of(context);
-    final width = (mq.size.width - 20) / pagerColumnNumber;
-    late final double height;
-    switch (currentPagerCoverRate) {
-      case PagerCoverRate.rate3x4:
-        height = width * 4 / 3;
-        break;
-      case PagerCoverRate.rateSquare:
-        height = width;
-        break;
-    }
-    List<Widget> widgets = [];
-    for (var i = 0; i < widget.data.length; i++) {
-      final sealed = _isSealed(widget.data[i]);
-      widgets.add(GestureDetector(
-        onTap: sealed
-            ? null
-            : () {
-                _pushToComicInfo(widget.data[i]);
-              },
-        onLongPress: sealed ? null : _longPressCallback(i),
-        child: Column(
-          children: [
-            SizedBox(
-              width: width,
-              height: height,
-              child: Card(
-                shape: coverShape,
-                clipBehavior: Clip.antiAlias,
-                child: LayoutBuilder(
-                  builder: (BuildContext context, BoxConstraints constraints) {
-                    return _buildCoverByRate(
-                      comic: widget.data[i],
-                      constraints: constraints,
-                      index: i,
-                    );
-                  },
-                ),
-              ),
-            ),
-            Container(
-              width: width,
-              height: 50,
-              padding: const EdgeInsets.only(left: 5, right: 5, bottom: 10),
-              child: Text(
-                "${widget.data[i].name}\n",
-                maxLines: 2,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  height: 1.3,
-                ),
-                strutStyle: const StrutStyle(
-                  height: 1.3,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ));
-    }
-    if (widget.appendList != null) {
-      widgets.addAll(widget.appendList!);
-    }
-    final wrap = Wrap(
-      alignment: WrapAlignment.spaceAround,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      runAlignment: WrapAlignment.spaceBetween,
-      children: widgets,
-    );
-    if (widget.inScroll) {
-      return wrap;
-    }
-    final view = ListView(
-      controller: widget.controller,
-      physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.all(10.0),
-      children: [wrap],
-    );
-    return NotificationListener(
-      child: view,
-      onNotification: (scrollNotification) {
-        widget.onScroll?.call();
-        return true;
-      },
-    );
-  }
-
-  void _pushToComicInfo(ComicBasic data) {
-    Navigator.push(context, MaterialPageRoute(builder: (BuildContext context) {
-      return ComicInfoScreen(data.id, data);
-    }));
-  }
-
-  GestureLongPressCallback? _longPressCallback(int index) {
-    if (widget.longPressMenuItems != null &&
-        widget.longPressMenuItems!.isNotEmpty) {
-      return () {
-        showMenu(
-          context: context,
-          position: const RelativeRect.fromLTRB(0, 0, 0, 0),
-          items: widget.longPressMenuItems!
-              .map((e) => PopupMenuItem(
-                    child: Text(e.title),
-                    value: e,
-                  ))
-              .toList(),
-        ).then((value) {
-          if (value != null) {
-            value.onChoose.call(widget.data[index]);
-          }
-        });
-      };
-    }
-    return null;
-  }
-
-  List<LongPressMenuItem>? _longPressImageCallback(int index) {
-    if (widget.longPressMenuItems != null &&
-        widget.longPressMenuItems!.isNotEmpty) {
-      return widget.longPressMenuItems!
-          .map((e) => LongPressMenuItem(e.title, () {
-                e.onChoose(widget.data[index]);
-              }))
-          .toList();
-    }
-    return null;
-  }
+int readingGridColumns(double width, double textScale, int preferred) {
+  final automatic = ((width - 16) / (160 * textScale.clamp(1, 2) + 16))
+      .floor()
+      .clamp(1, 6);
+  return preferred <= 0 ? automatic : preferred.clamp(1, automatic);
 }

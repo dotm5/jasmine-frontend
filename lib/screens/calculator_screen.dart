@@ -1,3 +1,4 @@
+import 'package:jasmine/screens/components/expressive_page_transitions.dart';
 import 'package:flutter/material.dart';
 import '../basic/web_dav_sync.dart';
 import '../configs/login.dart';
@@ -536,13 +537,13 @@ class ContentBodyState extends State<ContentBody> {
           Future.delayed(Duration.zero, () async {
             await webDavSyncAuto(context);
             Navigator.of(context).pushReplacement(
-              MaterialPageRoute(builder: (BuildContext context) {
+              AppPageRoute(builder: (BuildContext context) {
                 return firstLoginScreen;
               }),
             );
           });
         } else {
-          Navigator.pushReplacement(context, MaterialPageRoute(
+          Navigator.pushReplacement(context, AppPageRoute(
             builder: (BuildContext context) {
               return const AppScreen();
             },

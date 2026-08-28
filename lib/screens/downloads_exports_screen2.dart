@@ -1,3 +1,4 @@
+import 'package:jasmine/screens/components/expressive_page_transitions.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -159,7 +160,7 @@ class _DownloadsExportScreen2State extends State<DownloadsExportScreen2> {
             throw Exception("申请权限被拒绝");
           }
           final exported = await Navigator.of(context).push(
-            MaterialPageRoute(
+            AppPageRoute(
               builder: (context) => DownloadsExportingScreen2(
                 idList: selected,
               ),

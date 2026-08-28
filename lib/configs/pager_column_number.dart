@@ -11,17 +11,14 @@ final pageColumnEvent = Event();
 
 Future initPagerColumnCount() async {
   String numStr = await methods.loadProperty(_propertyName);
-  if (numStr == "") {
-    numStr = "4";
-  }
-  _pagerColumnNumber = int.parse(numStr);
+  _pagerColumnNumber = (int.tryParse(numStr) ?? 0).clamp(0, 10);
 }
 
 Future choosePagerColumnCount(BuildContext context) async {
-  final choose = await chooseListDialog(
+  final choose = await chooseMapDialog<int>(
     context,
-    title: "分页每行漫画数",
-    values: List<int>.generate(10, (i) => i + 1),
+    title: "每行漫画数",
+    values: {'自动适应窗口': 0, for (var i = 1; i <= 10; i++) '$i 列': i},
   );
   if (choose != null) {
     await methods.saveProperty(_propertyName, choose.toString());

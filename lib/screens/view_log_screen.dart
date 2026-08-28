@@ -1,3 +1,4 @@
+import 'package:jasmine/screens/components/expressive_page_transitions.dart';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -42,7 +43,7 @@ class _ViewLogScreenState extends State<ViewLogScreen> {
               if ("是" == choose) {
                 await methods.clearViewLog();
                 Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(
+                  AppPageRoute(
                     builder: (BuildContext context) {
                       return const ViewLogScreen();
                     },

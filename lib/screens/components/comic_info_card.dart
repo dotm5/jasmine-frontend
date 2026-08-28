@@ -1,3 +1,4 @@
+import 'package:jasmine/screens/components/expressive_page_transitions.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:jasmine/basic/commons.dart';
@@ -11,106 +12,136 @@ import 'images.dart';
 class ComicInfoCard extends StatelessWidget {
   final bool link;
   final ComicBasic comic;
+  final bool prominent;
+  final List<Widget> actions;
 
   const ComicInfoCard(
     this.comic, {
     this.link = false,
+    this.prominent = false,
+    this.actions = const [],
     Key? key,
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    const titleStyle = TextStyle(fontWeight: FontWeight.bold);
+    final titleStyle = (prominent
+            ? Theme.of(context).textTheme.headlineSmall
+            : Theme.of(context).textTheme.titleMedium)
+        ?.copyWith(fontWeight: FontWeight.w700);
     final authorStyle = TextStyle(
-      fontSize: 13,
-      color: Colors.pink.shade300,
+      fontSize: prominent ? 14 : 13,
+      color: Theme.of(context).colorScheme.primary,
     );
     return Container(
-      padding: const EdgeInsets.only(top: 5, bottom: 5, left: 10, right: 10),
+      padding: EdgeInsets.all(prominent ? 16 : 10),
       decoration: BoxDecoration(
         border: Border(
           bottom: BorderSide(
-            color: Theme.of(context).dividerColor,
+            color:
+                prominent ? Colors.transparent : Theme.of(context).dividerColor,
           ),
         ),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Card(
-            shape: coverShape,
+            margin: EdgeInsets.zero,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
             clipBehavior: Clip.antiAlias,
             child: JM3x4Cover(
               comicId: comic.id,
-              width: 100 * 3 / 4,
-              height: 100,
+              width: prominent ? 112 : 75,
+              height: prominent ? 150 : 100,
             ),
           ),
-          Container(width: 10),
+          SizedBox(width: prominent ? 16 : 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 ...link
                     ? [
-                  Text.rich(TextSpan(children: [
-                    currentSearchTitleWords()
-                        ? TextSpan(
-                      style: titleStyle,
-                      children: titleProcess(comic.name, context),
-                      recognizer: LongPressGestureRecognizer()
-                        ..onLongPress = () {
-                          confirmCopy(context, comic.name);
-                        },
-                    )
-                        : TextSpan(
-                      text: comic.name,
-                      style: titleStyle,
-                      children: [],
-                      recognizer: LongPressGestureRecognizer()
-                        ..onLongPress = () {
-                          confirmCopy(context, comic.name);
-                        },
-                    ),
-                    ...currentDisplayJmcode()
-                        ? [
-                      TextSpan(
-                        text: "  (JM${comic.id})",
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.orange.shade700,
+                      Text.rich(
+                        TextSpan(
+                          children: [
+                            currentSearchTitleWords()
+                                ? TextSpan(
+                                  style: titleStyle,
+                                  children: titleProcess(comic.name, context),
+                                  recognizer:
+                                      LongPressGestureRecognizer()
+                                        ..onLongPress = () {
+                                          confirmCopy(context, comic.name);
+                                        },
+                                )
+                                : TextSpan(
+                                  text: comic.name,
+                                  style: titleStyle,
+                                  children: [],
+                                  recognizer:
+                                      LongPressGestureRecognizer()
+                                        ..onLongPress = () {
+                                          confirmCopy(context, comic.name);
+                                        },
+                                ),
+                            ...currentDisplayJmcode()
+                                ? [
+                                  TextSpan(
+                                    text: "  (JM${comic.id})",
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color:
+                                          Theme.of(
+                                            context,
+                                          ).colorScheme.onSurfaceVariant,
+                                    ),
+                                    recognizer:
+                                        LongPressGestureRecognizer()
+                                          ..onLongPress = () {
+                                            confirmCopy(
+                                              context,
+                                              "JM${comic.id}",
+                                            );
+                                          },
+                                  ),
+                                ]
+                                : [],
+                          ],
                         ),
-                        recognizer: LongPressGestureRecognizer()
-                          ..onLongPress = () {
-                            confirmCopy(context, "JM${comic.id}");
-                          },
                       ),
                     ]
-                        : [],
-                  ])),
-                ]
                     : [Text(comic.name, style: titleStyle)],
                 Container(height: 4),
                 link
                     ? GestureDetector(
-                        onTap: () {
-                          Navigator.of(context).push(MaterialPageRoute(
+                      onTap: () {
+                        Navigator.of(context).push(
+                          AppPageRoute(
                             builder: (BuildContext context) {
                               return ComicSearchScreen(
                                 initKeywords: comic.author,
                               );
                             },
-                          ));
-                        },
-                        onLongPress: () {
-                          confirmCopy(context, comic.author);
-                        },
-                        child: Text(comic.author, style: authorStyle),
-                      )
+                          ),
+                        );
+                      },
+                      onLongPress: () {
+                        confirmCopy(context, comic.author);
+                      },
+                      child: Text(comic.author, style: authorStyle),
+                    )
                     : Text(comic.author, style: authorStyle),
                 Container(height: 4),
                 _buildCategoryRow(),
-                if (comic.updateAt != null ||
-                    comic.addtime != null) ...[
+                if (actions.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  Wrap(spacing: 8, runSpacing: 8, children: actions),
+                ],
+                if (comic.updateAt != null || comic.addtime != null) ...[
                   Container(height: 4),
                   Text(
                     _buildTimeText(),
@@ -147,11 +178,7 @@ class ComicInfoCard extends StatelessWidget {
     } else {
       text = categorySubTitle!;
     }
-    return Text(
-      text,
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-    );
+    return Text(text, maxLines: 1, overflow: TextOverflow.ellipsis);
   }
 
   List<TextSpan> titleProcess(String name, BuildContext context) {
@@ -172,7 +199,7 @@ class ComicInfoCard extends StatelessWidget {
       //   ),
       //   recognizer: TapGestureRecognizer()
       //     ..onTap = () {
-      //       Navigator.of(context).push(MaterialPageRoute(
+      //       Navigator.of(context).push(AppPageRoute(
       //         builder: (BuildContext context) {
       //           return ComicSearchScreen(
       //             initKeywords: name.substring(match.start + 1, match.end - 1),
@@ -186,24 +213,34 @@ class ComicInfoCard extends StatelessWidget {
       if (match.start > start) {
         result.add(TextSpan(text: name.substring(start, match.start + 1)));
       }
-      result.add(TextSpan(
-        text: name.substring(match.start + 1, match.end - 1),
-        style: TextStyle(
-          // 30%蓝色 叠加本该有的颜色
-          color: Color.alphaBlend(Colors.blue.withOpacity(0.3),
-              Theme.of(context).textTheme.bodyMedium!.color!),
+      result.add(
+        TextSpan(
+          text: name.substring(match.start + 1, match.end - 1),
+          style: TextStyle(
+            // 30%蓝色 叠加本该有的颜色
+            color: Color.alphaBlend(
+              Colors.blue.withOpacity(0.3),
+              Theme.of(context).textTheme.bodyMedium!.color!,
+            ),
+          ),
+          recognizer:
+              TapGestureRecognizer()
+                ..onTap = () {
+                  Navigator.of(context).push(
+                    AppPageRoute(
+                      builder: (BuildContext context) {
+                        return ComicSearchScreen(
+                          initKeywords: name.substring(
+                            match.start + 1,
+                            match.end - 1,
+                          ),
+                        );
+                      },
+                    ),
+                  );
+                },
         ),
-        recognizer: TapGestureRecognizer()
-          ..onTap = () {
-            Navigator.of(context).push(MaterialPageRoute(
-              builder: (BuildContext context) {
-                return ComicSearchScreen(
-                  initKeywords: name.substring(match.start + 1, match.end - 1),
-                );
-              },
-            ));
-          },
-      ));
+      );
       if (match.start > start) {
         result.add(TextSpan(text: name.substring(match.end - 1, match.end)));
       }

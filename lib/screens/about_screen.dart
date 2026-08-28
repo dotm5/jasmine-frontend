@@ -1,3 +1,4 @@
+import 'package:jasmine/screens/components/expressive_page_transitions.dart';
 import 'package:flutter/material.dart';
 import 'package:jasmine/basic/commons.dart';
 import 'package:jasmine/configs/versions.dart';
@@ -90,7 +91,7 @@ class AboutScreen extends StatelessWidget {
                       trailing: const Icon(Icons.chevron_right),
                       onTap:
                           () => Navigator.of(context).push(
-                            MaterialPageRoute(
+                            AppPageRoute(
                               builder: (_) => const LocalBuildScreen(),
                             ),
                           ),

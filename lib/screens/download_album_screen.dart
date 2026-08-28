@@ -11,6 +11,7 @@ import 'comic_info_screen.dart';
 import 'comic_reader_screen.dart';
 import 'comic_search_screen.dart';
 import 'components/right_click_pop.dart';
+import 'components/expressive_page_transitions.dart';
 
 class DownloadAlbumScreen extends StatefulWidget {
   final DownloadAlbum album;
@@ -46,7 +47,7 @@ class _DownloadAlbumScreenState extends State<DownloadAlbumScreen> {
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(
+                AppPageRoute(
                   builder: (BuildContext context) {
                     return ComicInfoScreen(widget.album.id, null);
                   },
@@ -100,7 +101,7 @@ class _DownloadAlbumScreenState extends State<DownloadAlbumScreen> {
               return InkWell(
                 onTap: () {
                   Navigator.of(context).push(
-                    MaterialPageRoute(builder: (BuildContext context) {
+                    AppPageRoute(builder: (BuildContext context) {
                       return ComicSearchScreen(initKeywords: e);
                     }),
                   );
@@ -211,7 +212,8 @@ class _DownloadAlbumScreenState extends State<DownloadAlbumScreen> {
   ) {
     Navigator.push(
       context,
-      MaterialPageRoute(
+      AppPageRoute(
+        settings: readerRouteSettings,
         builder: (context) => ComicReaderScreen(
           comic: ComicBasic(
             id: create.album.id,

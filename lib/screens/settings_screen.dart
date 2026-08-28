@@ -1,3 +1,4 @@
+import 'package:jasmine/screens/components/expressive_page_transitions.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
@@ -293,7 +294,7 @@ class _SettingsState extends State<SettingsScreen> {
               ListTile(
                 onTap:
                     () => Navigator.of(context).push(
-                      MaterialPageRoute(
+                      AppPageRoute(
                         builder: (c) => const DownloadsExportScreen2(),
                       ),
                     ),

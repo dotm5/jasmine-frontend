@@ -1,79 +1,92 @@
 import 'package:flutter/material.dart';
-import 'package:jasmine/basic/entities.dart';
-import 'package:jasmine/basic/methods.dart';
-import 'package:jasmine/screens/components/my_flat_button.dart';
+import '../../basic/entities.dart';
+import '../../basic/reading_progress.dart';
 
-// 继续阅读按钮
-class ContinueReadButton extends StatefulWidget {
-  final Future<ViewLog?> viewFuture;
-  final AlbumResponse album;
-  final Function(int epOrder, int pictureRank) onChoose;
-
+class ContinueReadButton extends StatelessWidget {
   const ContinueReadButton({
-    Key? key,
+    super.key,
     required this.album,
     required this.onChoose,
     required this.viewFuture,
-  }) : super(key: key);
+  });
+  final Future<ViewLog?> viewFuture;
+  final AlbumResponse album;
+  final void Function(int chapterId, int page) onChoose;
 
   @override
-  State<StatefulWidget> createState() => _ContinueReadButtonState();
-}
-
-class _ContinueReadButtonState extends State<ContinueReadButton> {
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder(
-      future: widget.viewFuture,
-      builder: (BuildContext context, AsyncSnapshot<ViewLog?> snapshot) {
-        late void Function() onPressed;
-        late String text;
-        if (snapshot.connectionState != ConnectionState.done) {
-          onPressed = () {};
-          text = '加载中';
-        } else {
-          ViewLog? viewLog = snapshot.data;
-          if (viewLog == null || viewLog.lastViewChapterId == 0) {
-            if (widget.album.series.isEmpty) {
-              return Container();
-            }
-            onPressed = () {
-              if (widget.album.series.isEmpty) {
-                widget.onChoose(widget.album.id, 0);
-              } else {
-                widget.album.series.sort(
-                  (a, b) => int.parse(a.sort).compareTo(int.parse(b.sort)),
-                );
-                widget.onChoose(widget.album.series[0].id, 0);
-              }
-            };
-            text = '从头开始';
-          } else {
-            onPressed = () {
-              widget.onChoose(
-                viewLog.lastViewChapterId,
-                viewLog.lastViewPage,
-              );
-            };
-            text = '继续阅读'; // todo names and pages
-            if (widget.album.series.isNotEmpty) {
-              for (var i = 0; i < widget.album.series.length; i++) {
-                if (widget.album.series[i].id == viewLog.lastViewChapterId) {
-                  text += " (${i + 1}.";
-                  if (widget.album.series[i].name.isNotEmpty) {
-                    text += widget.album.series[i].name + ".";
-                  }
-                  text += "P${viewLog.lastViewPage + 1})";
-                  break;
-                }
-              }
-            } else {
-              text += " (P${viewLog.lastViewPage + 1})";
-            }
-          }
-        }
-        return MyFlatButton(title: text, onPressed: onPressed);
-      },
-    );
-  }
+  Widget build(BuildContext context) => FutureBuilder<ViewLog?>(
+    future: viewFuture,
+    builder: (context, snapshot) {
+      final waiting = snapshot.connectionState != ConnectionState.done;
+      final series = sortedReadingSeries(album.series);
+      final progress = snapshot.data;
+      final canResume =
+          progress != null &&
+          progress.lastViewChapterId > 0 &&
+          progress.lastViewPage >= 0 &&
+          (series.isEmpty
+              ? progress.lastViewChapterId == album.id
+              : series.any((e) => e.id == progress.lastViewChapterId));
+      final chapter =
+          canResume && series.isNotEmpty
+              ? series.firstWhere((e) => e.id == progress.lastViewChapterId)
+              : null;
+      final position =
+          chapter == null
+              ? ''
+              : '${chapter.name.isNotEmpty ? chapter.name : '第 ${chapter.sort} 话'} · ';
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (canResume)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                '上次读到 $position第 ${progress.lastViewPage + 1} 页',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          if (snapshot.hasError)
+            const Padding(
+              padding: EdgeInsets.only(bottom: 8),
+              child: Text('阅读位置暂未读取，可从头开始', textAlign: TextAlign.center),
+            ),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              style: FilledButton.styleFrom(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+              ),
+              onPressed:
+                  waiting
+                      ? null
+                      : () => onChoose(
+                        canResume
+                            ? progress.lastViewChapterId
+                            : (series.isEmpty ? album.id : series.first.id),
+                        canResume ? progress.lastViewPage : 0,
+                      ),
+              icon: Icon(
+                waiting
+                    ? Icons.hourglass_top_rounded
+                    : Icons.auto_stories_rounded,
+              ),
+              label: Text(
+                waiting
+                    ? '读取阅读进度…'
+                    : canResume
+                    ? '继续阅读'
+                    : '开始阅读',
+              ),
+            ),
+          ),
+        ],
+      );
+    },
+  );
 }

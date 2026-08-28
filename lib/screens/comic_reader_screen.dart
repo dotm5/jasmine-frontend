@@ -27,10 +27,13 @@ import 'package:zoomable_positioned_list/zoomable_positioned_list.dart'
     as zoomable;
 
 import '../configs/ignore_view_log.dart';
+import '../basic/reading_progress.dart';
+import 'components/reading_widgets.dart';
 import '../configs/no_animation.dart';
 import '../configs/volume_key_control.dart';
 import 'components/images.dart';
 import 'components/right_click_pop.dart';
+import 'components/expressive_page_transitions.dart';
 
 class ComicReaderScreen extends StatefulWidget {
   final ComicBasic comic;
@@ -70,12 +73,13 @@ class _ComicReaderScreenState extends State<ComicReaderScreen> {
   @override
   void initState() {
     if (currentIgnoreVewLog()) {
-      late Future<AlbumResponse> _albumFuture = methods.album(
-        widget.comic.id,
-      );
+      late Future<AlbumResponse> _albumFuture = methods.album(widget.comic.id);
       _albumFuture.then((value) {
         methods.updateViewLog(
-            widget.comic.id, widget.chapterId, widget.initRank);
+          widget.comic.id,
+          widget.chapterId,
+          widget.initRank,
+        );
       });
     } else {
       methods.updateViewLog(widget.comic.id, widget.chapterId, widget.initRank);
@@ -99,7 +103,7 @@ class _ComicReaderScreenState extends State<ComicReaderScreen> {
             body: ContentError(
               onRefresh: () async {
                 setState(() {
-                  _chapterFuture = methods.chapter(widget.chapterId);
+                  _chapterFuture = widget.loadChapter(widget.chapterId);
                 });
               },
               error: snapshot.error,
@@ -108,44 +112,64 @@ class _ComicReaderScreenState extends State<ComicReaderScreen> {
           );
         }
         if (snapshot.connectionState != ConnectionState.done) {
-          return Scaffold(
-            appBar: AppBar(),
-            body: const ContentLoading(),
-          );
+          return Scaffold(appBar: AppBar(), body: const ContentLoading());
         }
         final chapter = snapshot.requireData;
+        if (chapter.images.isEmpty) {
+          return Scaffold(
+            appBar: AppBar(title: Text(chapter.name)),
+            body: Center(
+              child: SingleChildScrollView(
+                child: ReadingEmptyState(
+                  icon: Icons.image_not_supported_outlined,
+                  title: '这一话暂时没有可显示的页面',
+                  action: FilledButton(
+                    onPressed: _load,
+                    child: const Text('重新加载'),
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
         final screen = Scaffold(
           backgroundColor: Colors.black,
           body: _ComicReader(
             comicId: widget.comic.id,
             chapter: chapter,
-            startIndex: widget.initRank,
+            startIndex: widget.initRank.clamp(0, chapter.images.length - 1),
             reload: (int index, bool fullScreen) async {
               Navigator.of(context).pushReplacement(
-                MaterialPageRoute(builder: (BuildContext context) {
-                  return ComicReaderScreen(
-                    comic: widget.comic,
-                    series: widget.series,
-                    chapterId: widget.chapterId,
-                    initRank: index,
-                    loadChapter: widget.loadChapter,
-                    fullScreenOnInit: fullScreen,
-                  );
-                }),
+                AppPageRoute(
+                  settings: readerRouteSettings,
+                  builder: (BuildContext context) {
+                    return ComicReaderScreen(
+                      comic: widget.comic,
+                      series: widget.series,
+                      chapterId: widget.chapterId,
+                      initRank: index,
+                      loadChapter: widget.loadChapter,
+                      fullScreenOnInit: fullScreen,
+                    );
+                  },
+                ),
               );
             },
             onChangeEp: (int id, bool fullScreen) async {
               Navigator.of(context).pushReplacement(
-                MaterialPageRoute(builder: (BuildContext context) {
-                  return ComicReaderScreen(
-                    comic: widget.comic,
-                    series: widget.series,
-                    chapterId: id,
-                    initRank: 0,
-                    loadChapter: widget.loadChapter,
-                    fullScreenOnInit: fullScreen,
-                  );
-                }),
+                AppPageRoute(
+                  settings: readerRouteSettings,
+                  builder: (BuildContext context) {
+                    return ComicReaderScreen(
+                      comic: widget.comic,
+                      series: widget.series,
+                      chapterId: id,
+                      initRank: 0,
+                      loadChapter: widget.loadChapter,
+                      fullScreenOnInit: fullScreen,
+                    );
+                  },
+                ),
               );
             },
             readerType: _readerType,
@@ -165,13 +189,15 @@ class _ComicReaderScreenState extends State<ComicReaderScreen> {
         onKeyEvent: (node, event) {
           if (event is KeyDownEvent) {
             if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-              _readerControllerEvent
-                  .broadcast(_ReaderControllerEventArgs("UP"));
+              _readerControllerEvent.broadcast(
+                _ReaderControllerEventArgs("UP"),
+              );
               return KeyEventResult.handled;
             }
             if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-              _readerControllerEvent
-                  .broadcast(_ReaderControllerEventArgs("DOWN"));
+              _readerControllerEvent.broadcast(
+                _ReaderControllerEventArgs("DOWN"),
+              );
               return KeyEventResult.handled;
             }
           }
@@ -203,8 +229,9 @@ StreamSubscription? volumeS;
 void addVolumeListen() {
   _volumeListenCount++;
   if (_volumeListenCount == 1) {
-    volumeS =
-        volumeButtonChannel.receiveBroadcastStream().listen(_onVolumeEvent);
+    volumeS = volumeButtonChannel.receiveBroadcastStream().listen(
+      _onVolumeEvent,
+    );
   }
 }
 
@@ -275,19 +302,19 @@ abstract class _ComicReaderState extends State<_ComicReader> {
   late int _slider;
   List<int> _sortedSeriesIds = const <int>[];
   int? _nextEpId;
+  int? _previousEpId;
 
   void _rebuildSeriesCache() {
     if (widget.chapter.series.isEmpty) {
       _sortedSeriesIds = const <int>[];
       _nextEpId = null;
+      _previousEpId = null;
       return;
     }
-    final entries = [...widget.chapter.series];
-    entries.sort(
-      (a, b) => int.parse(a.sort).compareTo(int.parse(b.sort)),
-    );
+    final entries = sortedReadingSeries(widget.chapter.series);
     _sortedSeriesIds = entries.map((e) => e.id).toList(growable: false);
     final index = _sortedSeriesIds.indexOf(widget.chapter.id);
+    _previousEpId = index > 0 ? _sortedSeriesIds[index - 1] : null;
     if (index >= 0 && index < _sortedSeriesIds.length - 1) {
       _nextEpId = _sortedSeriesIds[index + 1];
     } else {
@@ -315,10 +342,11 @@ abstract class _ComicReaderState extends State<_ComicReader> {
   }
 
   void _onCurrentChange(int index) {
+    index = index.clamp(0, widget.chapter.images.length - 1);
     if (index != _current) {
       setState(() {
         _current = index;
-        _slider = index;
+        if (!_sliderDragging) _slider = index;
         var _ = methods.updateViewLog(
           widget.comicId,
           widget.chapter.id,
@@ -346,6 +374,13 @@ abstract class _ComicReaderState extends State<_ComicReader> {
       addVolumeListen();
     }
     _rebuildSeriesCache();
+    unawaited(
+      rememberReadingChapter(widget.comicId, widget.chapter).catchError((
+        Object error,
+      ) {
+        debugPrient('Remember reading chapter: $error');
+      }),
+    );
     super.initState();
   }
 
@@ -398,7 +433,9 @@ abstract class _ComicReaderState extends State<_ComicReader> {
         return Stack(
           children: [
             _buildViewer(),
-            if (_sliderDragging) _sliderDraggingText(),
+            if (_sliderDragging &&
+                currentReaderSliderPosition != ReaderSliderPosition.bottom)
+              _sliderDraggingText(),
             _buildBar(_buildFullScreenControllerStackItem()),
           ],
         );
@@ -406,7 +443,9 @@ abstract class _ComicReaderState extends State<_ComicReader> {
         return Stack(
           children: [
             _buildTouchOnceControllerAction(_buildViewer()),
-            if (_sliderDragging) _sliderDraggingText(),
+            if (_sliderDragging &&
+                currentReaderSliderPosition != ReaderSliderPosition.bottom)
+              _sliderDraggingText(),
             _buildBar(null),
           ],
         );
@@ -414,7 +453,9 @@ abstract class _ComicReaderState extends State<_ComicReader> {
         return Stack(
           children: [
             _buildTouchDoubleControllerAction(_buildViewer()),
-            if (_sliderDragging) _sliderDraggingText(),
+            if (_sliderDragging &&
+                currentReaderSliderPosition != ReaderSliderPosition.bottom)
+              _sliderDraggingText(),
             _buildBar(null),
           ],
         );
@@ -422,7 +463,9 @@ abstract class _ComicReaderState extends State<_ComicReader> {
         return Stack(
           children: [
             _buildTouchDoubleOnceNextControllerAction(_buildViewer()),
-            if (_sliderDragging) _sliderDraggingText(),
+            if (_sliderDragging &&
+                currentReaderSliderPosition != ReaderSliderPosition.bottom)
+              _sliderDraggingText(),
             _buildBar(null),
           ],
         );
@@ -430,7 +473,9 @@ abstract class _ComicReaderState extends State<_ComicReader> {
         return Stack(
           children: [
             _buildViewer(),
-            if (_sliderDragging) _sliderDraggingText(),
+            if (_sliderDragging &&
+                currentReaderSliderPosition != ReaderSliderPosition.bottom)
+              _sliderDraggingText(),
             _buildBar(_buildThreeAreaControllerAction()),
           ],
         );
@@ -447,10 +492,7 @@ abstract class _ComicReaderState extends State<_ComicReader> {
         ),
         child: Text(
           "${_slider + 1} / ${widget.chapter.images.length}",
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 30,
-          ),
+          style: const TextStyle(color: Colors.white, fontSize: 30),
         ),
       ),
     );
@@ -468,8 +510,12 @@ abstract class _ComicReaderState extends State<_ComicReader> {
           child: Material(
             color: Colors.transparent,
             child: Container(
-              padding:
-                  const EdgeInsets.only(left: 10, right: 10, top: 4, bottom: 4),
+              padding: const EdgeInsets.only(
+                left: 10,
+                right: 10,
+                top: 4,
+                bottom: 4,
+              ),
               margin: const EdgeInsets.only(bottom: 10),
               decoration: const BoxDecoration(
                 borderRadius: BorderRadius.only(
@@ -496,34 +542,39 @@ abstract class _ComicReaderState extends State<_ComicReader> {
       );
     }
     return SafeArea(
-        child: Align(
-      alignment: Alignment.bottomLeft,
-      child: Material(
-        color: Colors.transparent,
-        child: Container(
-          padding:
-              const EdgeInsets.only(left: 10, right: 10, top: 4, bottom: 4),
-          margin: const EdgeInsets.only(bottom: 10),
-          decoration: const BoxDecoration(
-            borderRadius: BorderRadius.only(
-              topRight: Radius.circular(10),
-              bottomRight: Radius.circular(10),
+      child: Align(
+        alignment: Alignment.bottomLeft,
+        child: Material(
+          color: Colors.transparent,
+          child: Container(
+            padding: const EdgeInsets.only(
+              left: 10,
+              right: 10,
+              top: 4,
+              bottom: 4,
             ),
-            color: Color(0x88000000),
-          ),
-          child: GestureDetector(
-            onTap: () {
-              _onFullScreenChange(!_fullScreen);
-            },
-            child: Icon(
-              _fullScreen ? Icons.fullscreen_exit : Icons.fullscreen_outlined,
-              size: 30,
-              color: Colors.white,
+            margin: const EdgeInsets.only(bottom: 10),
+            decoration: const BoxDecoration(
+              borderRadius: BorderRadius.only(
+                topRight: Radius.circular(10),
+                bottomRight: Radius.circular(10),
+              ),
+              color: Color(0x88000000),
+            ),
+            child: GestureDetector(
+              onTap: () {
+                _onFullScreenChange(!_fullScreen);
+              },
+              child: Icon(
+                _fullScreen ? Icons.fullscreen_exit : Icons.fullscreen_outlined,
+                size: 30,
+                color: Colors.white,
+              ),
             ),
           ),
         ),
       ),
-    ));
+    );
   }
 
   Widget _buildTouchOnceControllerAction(Widget child) {
@@ -566,8 +617,9 @@ abstract class _ComicReaderState extends State<_ComicReader> {
           child: GestureDetector(
             behavior: HitTestBehavior.translucent,
             onTap: () {
-              _readerControllerEvent
-                  .broadcast(_ReaderControllerEventArgs("UP"));
+              _readerControllerEvent.broadcast(
+                _ReaderControllerEventArgs("UP"),
+              );
             },
             child: Container(),
           ),
@@ -576,8 +628,9 @@ abstract class _ComicReaderState extends State<_ComicReader> {
           child: GestureDetector(
             behavior: HitTestBehavior.translucent,
             onTap: () {
-              _readerControllerEvent
-                  .broadcast(_ReaderControllerEventArgs("DOWN"));
+              _readerControllerEvent.broadcast(
+                _ReaderControllerEventArgs("DOWN"),
+              );
             },
             child: Container(),
           ),
@@ -592,25 +645,13 @@ abstract class _ComicReaderState extends State<_ComicReader> {
         late Widget child;
         switch (currentReaderDirection) {
           case ReaderDirection.topToBottom:
-            child = Column(children: [
-              up,
-              fullScreen,
-              down,
-            ]);
+            child = Column(children: [up, fullScreen, down]);
             break;
           case ReaderDirection.leftToRight:
-            child = Row(children: [
-              up,
-              fullScreen,
-              down,
-            ]);
+            child = Row(children: [up, fullScreen, down]);
             break;
           case ReaderDirection.rightToLeft:
-            child = Row(children: [
-              down,
-              fullScreen,
-              up,
-            ]);
+            child = Row(children: [down, fullScreen, up]);
             break;
         }
         return SizedBox(
@@ -628,46 +669,31 @@ abstract class _ComicReaderState extends State<_ComicReader> {
         return Column(
           children: [
             _buildAppBar(),
-            Expanded(child: child ?? Container()),
-            _fullScreen
-                ? Container()
-                : Container(
-                    height: 45,
-                    color: const Color(0x88000000),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Container(width: 15),
-                        IconButton(
-                          icon: const Icon(Icons.fullscreen),
-                          color: Colors.white,
-                          onPressed: () {
-                            _onFullScreenChange(!_fullScreen);
-                          },
-                        ),
-                        Container(width: 10),
-                        Expanded(
-                          child: _buildSliderBottom(),
-                        ),
-                        Container(width: 10),
-                        IconButton(
-                          icon: const Icon(Icons.skip_next_outlined),
-                          color: Colors.white,
-                          onPressed: _onNextAction,
-                        ),
-                        Container(width: 15),
-                      ],
-                    ),
-                  ),
-            _fullScreen
-                ? Container()
-                : Container(
-                    color: const Color(0x88000000),
-                    child: SafeArea(
-                      top: false,
-                      child: Container(),
-                    ),
-                  ),
+            Expanded(child: child ?? const SizedBox()),
+            if (!_fullScreen)
+              ReaderBottomControls(
+                page: _slider,
+                total: widget.chapter.images.length,
+                onChanged:
+                    (page) => setState(() {
+                      _sliderDragging = true;
+                      _slider = page;
+                    }),
+                onChangeEnd: (page) {
+                  setState(() {
+                    _sliderDragging = false;
+                    _slider = page;
+                  });
+                  if (page != _current) _needJumpTo(page, false);
+                },
+                onContents: _onChooseEp,
+                onPrevious:
+                    _previousEpId == null
+                        ? null
+                        : () => widget.onChangeEp(_previousEpId!, _fullScreen),
+                onNext: _nextEpId == null ? null : _onNextAction,
+                onSettings: _onMoreSetting,
+              ),
           ],
         );
       case ReaderSliderPosition.right:
@@ -701,84 +727,98 @@ abstract class _ComicReaderState extends State<_ComicReader> {
     }
   }
 
-  Widget _buildAppBar() => _fullScreen
-      ? Container()
-      : AppBar(
-          title: Text(widget.chapter.name),
-          actions: [
-            IconButton(
-              onPressed: _onChooseEp,
-              icon: const Icon(Icons.menu_open),
+  Widget _buildAppBar() =>
+      _fullScreen
+          ? const SizedBox.shrink()
+          : AppBar(
+            backgroundColor: const Color(0xF018171C),
+            foregroundColor: const Color(0xFFEAE1F2),
+            surfaceTintColor: Colors.transparent,
+            centerTitle: false,
+            systemOverlayStyle: SystemUiOverlayStyle.light.copyWith(
+              statusBarColor: Colors.transparent,
             ),
-            IconButton(
-              onPressed: _onMoreSetting,
-              icon: const Icon(Icons.more_horiz),
+            title: Text(
+              widget.chapter.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
-          ],
-        );
-
-  Widget _buildSliderBottom() {
-    return Column(
-      children: [
-        Expanded(child: Container()),
-        SizedBox(
-          height: 25,
-          child: _buildSliderWidget(Axis.horizontal),
-        ),
-        Expanded(child: Container()),
-      ],
-    );
-  }
-
-  Widget _buildSliderLeft() => _fullScreen
-      ? Container()
-      : Align(
-          alignment: Alignment.centerLeft,
-          child: Material(
-            color: Colors.transparent,
-            child: Container(
-              width: 35,
-              height: 300,
-              decoration: const BoxDecoration(
-                color: Color(0x66000000),
-                borderRadius: BorderRadius.only(
-                  topRight: Radius.circular(10),
-                  bottomRight: Radius.circular(10),
+            actions: [
+              IconButton(
+                tooltip: '隐藏阅读工具',
+                onPressed: () => _onFullScreenChange(true),
+                icon: const Icon(Icons.fullscreen_rounded),
+              ),
+              if (currentReaderSliderPosition !=
+                  ReaderSliderPosition.bottom) ...[
+                IconButton(
+                  tooltip: '目录',
+                  onPressed: _onChooseEp,
+                  icon: const Icon(Icons.menu_open),
                 ),
-              ),
-              padding:
-                  const EdgeInsets.only(top: 10, bottom: 10, left: 6, right: 5),
-              child: Center(
-                child: _buildSliderWidget(Axis.vertical),
-              ),
-            ),
-          ),
-        );
-
-  Widget _buildSliderRight() => _fullScreen
-      ? Container()
-      : Align(
-          alignment: Alignment.centerRight,
-          child: Material(
-            color: Colors.transparent,
-            child: Container(
-              width: 35,
-              height: 300,
-              decoration: const BoxDecoration(
-                color: Color(0x66000000),
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(10),
-                  bottomLeft: Radius.circular(10),
+                IconButton(
+                  tooltip: '阅读设置',
+                  onPressed: _onMoreSetting,
+                  icon: const Icon(Icons.tune_rounded),
                 ),
-              ),
-              padding:
-                  const EdgeInsets.only(top: 10, bottom: 10, left: 5, right: 6),
-              child: Center(
-                child: _buildSliderWidget(Axis.vertical),
+              ],
+            ],
+          );
+  Widget _buildSliderLeft() =>
+      _fullScreen
+          ? Container()
+          : Align(
+            alignment: Alignment.centerLeft,
+            child: Material(
+              color: Colors.transparent,
+              child: Container(
+                width: 35,
+                height: 300,
+                decoration: const BoxDecoration(
+                  color: Color(0x66000000),
+                  borderRadius: BorderRadius.only(
+                    topRight: Radius.circular(10),
+                    bottomRight: Radius.circular(10),
+                  ),
+                ),
+                padding: const EdgeInsets.only(
+                  top: 10,
+                  bottom: 10,
+                  left: 6,
+                  right: 5,
+                ),
+                child: Center(child: _buildSliderWidget(Axis.vertical)),
               ),
             ),
-          ),
-        );
+          );
+
+  Widget _buildSliderRight() =>
+      _fullScreen
+          ? Container()
+          : Align(
+            alignment: Alignment.centerRight,
+            child: Material(
+              color: Colors.transparent,
+              child: Container(
+                width: 35,
+                height: 300,
+                decoration: const BoxDecoration(
+                  color: Color(0x66000000),
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(10),
+                    bottomLeft: Radius.circular(10),
+                  ),
+                ),
+                padding: const EdgeInsets.only(
+                  top: 10,
+                  bottom: 10,
+                  left: 5,
+                  right: 6,
+                ),
+                child: Center(child: _buildSliderWidget(Axis.vertical)),
+              ),
+            ),
+          );
 
   Widget _buildSliderWidget(Axis axis) {
     return FlutterSlider(
@@ -815,10 +855,7 @@ abstract class _ComicReaderState extends State<_ComicReader> {
           color: Theme.of(context).colorScheme.secondary,
         ),
       ),
-      step: const FlutterSliderStep(
-        step: 1,
-        isPercentRange: false,
-      ),
+      step: const FlutterSliderStep(step: 1, isPercentRange: false),
       tooltip: FlutterSliderTooltip(disabled: true),
     );
   }
@@ -871,7 +908,10 @@ abstract class _ComicReaderState extends State<_ComicReader> {
         }
       }
     }
-    return 45;
+    return currentReaderSliderPosition == ReaderSliderPosition.bottom
+        ? ReaderBottomControls.contentHeight(context) +
+            MediaQuery.paddingOf(context).bottom
+        : 45;
   }
 
   bool _fullscreenController() {
@@ -922,10 +962,7 @@ class _EpChooserState extends State<_EpChooser> {
       );
     }
 
-    var entries = [...widget.chapter.series];
-    entries.sort(
-      (a, b) => int.parse(a.sort).compareTo(int.parse(b.sort)),
-    );
+    final entries = sortedReadingSeries(widget.chapter.series);
     var widgets = [
       Container(height: 20),
       ...entries.map((e) {
@@ -949,7 +986,7 @@ class _EpChooserState extends State<_EpChooser> {
             child: Text(e.sort + (e.name == "" ? "" : (" - ${e.name}"))),
           ),
         );
-      })
+      }),
     ];
     final index = entries.map((e) => e.id).toList().indexOf(widget.chapter.id);
     return ScrollablePositionedList.builder(
@@ -1024,11 +1061,7 @@ class _SettingPanelState extends State<_SettingPanel> {
               icon: Column(
                 children: [
                   Container(height: 3),
-                  Icon(
-                    icon,
-                    size: 25,
-                    color: Colors.white,
-                  ),
+                  Icon(icon, size: 25, color: Colors.white),
                   Container(height: 3),
                   Text(
                     title,
@@ -1040,7 +1073,7 @@ class _SettingPanelState extends State<_SettingPanel> {
                 ],
               ),
               onPressed: onPressed,
-            )
+            ),
           ],
         ),
       ),
@@ -1072,8 +1105,9 @@ class _ComicReaderWebToonState extends _ComicReaderState {
   }
 
   void _onListCurrentChange() {
-    final to =
-        _findFirstVisibleIndex(_itemPositionsListener.itemPositions.value);
+    final to = _findFirstVisibleIndex(
+      _itemPositionsListener.itemPositions.value,
+    );
     // 包含一个下一章, 假设5张图片 0,1,2,3,4 length=5, 下一章=5
     if (to != null && to >= 0 && to < widget.chapter.images.length) {
       super._onCurrentChange(to);
@@ -1081,9 +1115,10 @@ class _ComicReaderWebToonState extends _ComicReaderState {
   }
 
   int? _findFirstVisibleIndex(Iterable<zoomable.ItemPosition> positions) {
-    final visible = positions
-        .where((p) => p.itemTrailingEdge > 0 && p.itemLeadingEdge < 1)
-        .toList();
+    final visible =
+        positions
+            .where((p) => p.itemTrailingEdge > 0 && p.itemLeadingEdge < 1)
+            .toList();
     if (visible.isEmpty) return null;
     visible.sort((a, b) => a.index.compareTo(b.index));
     return visible.first.index;
@@ -1101,18 +1136,14 @@ class _ComicReaderWebToonState extends _ComicReaderState {
         duration: const Duration(milliseconds: 400),
       );
     } else {
-      _itemScrollController.jumpTo(
-        index: index,
-      );
+      _itemScrollController.jumpTo(index: index);
     }
   }
 
   @override
   Widget _buildViewer() {
     return Container(
-      decoration: const BoxDecoration(
-        color: Colors.black,
-      ),
+      decoration: const BoxDecoration(color: Colors.black),
       child: _buildList(),
     );
   }
@@ -1133,7 +1164,8 @@ class _ComicReaderWebToonState extends _ComicReaderState {
                     _trueSizes[index]!.width,
               );
             } else {
-              var maxHeight = constraints.maxHeight -
+              var maxHeight =
+                  constraints.maxHeight -
                   super._appBarHeight() -
                   super._bottomBarHeight() -
                   MediaQuery.of(context).padding.bottom;
@@ -1150,8 +1182,10 @@ class _ComicReaderWebToonState extends _ComicReaderState {
             } else {
               // ReaderDirection.LEFT_TO_RIGHT
               // ReaderDirection.RIGHT_TO_LEFT
-              renderSize =
-                  Size(constraints.maxWidth / 2, constraints.maxHeight);
+              renderSize = Size(
+                constraints.maxWidth / 2,
+                constraints.maxHeight,
+              );
             }
           }
           var currentIndex = index;
@@ -1174,19 +1208,20 @@ class _ComicReaderWebToonState extends _ComicReaderState {
         return zoomable.ZoomablePositionedList.builder(
           enableZoom: false,
           initialScrollIndex: widget.startIndex,
-          scrollDirection: widget.readerDirection == ReaderDirection.topToBottom
-              ? Axis.vertical
-              : Axis.horizontal,
+          scrollDirection:
+              widget.readerDirection == ReaderDirection.topToBottom
+                  ? Axis.vertical
+                  : Axis.horizontal,
           reverse: widget.readerDirection == ReaderDirection.rightToLeft,
           padding: EdgeInsets.only(
             // 不管全屏与否, 滚动方向如何, 顶部永远保持间距
             top: super._appBarHeight(),
-            bottom: widget.readerDirection == ReaderDirection.topToBottom
-                ? 130 // 纵向滚动 底部永远都是130的空白
-                : (super._bottomBarHeight() +
-                    MediaQuery.of(context).padding.bottom)
+            bottom:
+                widget.readerDirection == ReaderDirection.topToBottom
+                    ? 130 // 纵向滚动 底部永远都是130的空白
+                    : (super._bottomBarHeight() +
+                        MediaQuery.of(context).padding.bottom),
             // 非全屏时, 顶部去掉顶部BAR的高度, 底部去掉底部BAR的高度, 形成看似填充的效果
-            ,
           ),
           itemScrollController: _itemScrollController,
           itemPositionsListener: _itemPositionsListener,
@@ -1240,8 +1275,10 @@ class _ComicReaderGalleryState extends _ComicReaderState {
 
   void _reloadImage(int index) async {
     if (mounted) {
-      final oldProvider =
-          PageImageProvider(widget.chapter.id, widget.chapter.images[index]);
+      final oldProvider = PageImageProvider(
+        widget.chapter.id,
+        widget.chapter.images[index],
+      );
       await oldProvider.evict();
       await methods.deleteJmPageImageCache(
         widget.chapter.id,
@@ -1259,38 +1296,47 @@ class _ComicReaderGalleryState extends _ComicReaderState {
 
   Widget _buildGallery() {
     return PhotoViewGallery.builder(
-      scrollDirection: widget.readerDirection == ReaderDirection.topToBottom
-          ? Axis.vertical
-          : Axis.horizontal,
+      scrollDirection:
+          widget.readerDirection == ReaderDirection.topToBottom
+              ? Axis.vertical
+              : Axis.horizontal,
       reverse: widget.readerDirection == ReaderDirection.rightToLeft,
       backgroundDecoration: const BoxDecoration(color: Colors.black),
-      loadingBuilder: (context, event) => LayoutBuilder(
-        builder: (BuildContext context, BoxConstraints constraints) {
-          return buildLoading(
-              context, constraints.maxWidth, constraints.maxHeight);
-        },
-      ),
+      loadingBuilder:
+          (context, event) => LayoutBuilder(
+            builder: (BuildContext context, BoxConstraints constraints) {
+              return buildLoading(
+                context,
+                constraints.maxWidth,
+                constraints.maxHeight,
+              );
+            },
+          ),
       pageController: _pageController,
       onPageChanged: _onGalleryPageChange,
       itemCount: widget.chapter.images.length,
       allowImplicitScrolling: true,
       builder: (BuildContext context, int index) {
         final reloadKey = _reloadKeys[index] ?? 0;
-        final imageProvider =
-            PageImageProvider(widget.chapter.id, widget.chapter.images[index]);
+        final imageProvider = PageImageProvider(
+          widget.chapter.id,
+          widget.chapter.images[index],
+        );
 
         return PhotoViewGalleryPageOptions.customChild(
           disableGestures:
               currentReaderControllerType == ReaderControllerType.touchDouble ||
-                  currentReaderControllerType ==
-                      ReaderControllerType.touchDoubleOnceNext,
+              currentReaderControllerType ==
+                  ReaderControllerType.touchDoubleOnceNext,
           child: LayoutBuilder(
             key: ValueKey(
-                'page_${widget.chapter.id}_${widget.chapter.images[index]}_$reloadKey'),
+              'page_${widget.chapter.id}_${widget.chapter.images[index]}_$reloadKey',
+            ),
             builder: (BuildContext context, BoxConstraints constraints) {
               return Image(
                 key: ValueKey(
-                    'image_${widget.chapter.id}_${widget.chapter.images[index]}_$reloadKey'),
+                  'image_${widget.chapter.id}_${widget.chapter.images[index]}_$reloadKey',
+                ),
                 image: imageProvider,
                 fit: BoxFit.contain,
                 loadingBuilder: (context, child, loadingProgress) {
@@ -1332,12 +1378,7 @@ class _ComicReaderGalleryState extends _ComicReaderState {
       children: [
         Container(height: _fullScreen ? 0 : super._appBarHeight()),
         Expanded(
-          child: Stack(
-            children: [
-              _buildGallery(),
-              _buildNextEpController(),
-            ],
-          ),
+          child: Stack(children: [_buildGallery(), _buildNextEpController()]),
         ),
         Container(height: _fullScreen ? 0 : super._bottomBarHeight()),
       ],
@@ -1361,9 +1402,11 @@ class _ComicReaderGalleryState extends _ComicReaderState {
   void _onGalleryPageChange(int to) {
     var toIndex = to * 2;
     // 提前加载
-    for (var i = toIndex + 1;
-        i < toIndex + 3 && i < widget.chapter.images.length;
-        i++) {
+    for (
+      var i = toIndex + 1;
+      i < toIndex + 3 && i < widget.chapter.images.length;
+      i++
+    ) {
       final ip = PageImageProvider(widget.chapter.id, widget.chapter.images[i]);
       precacheImage(ip, context);
     }
@@ -1375,8 +1418,10 @@ class _ComicReaderGalleryState extends _ComicReaderState {
     fn() {
       for (var i = index - 1; i < index + 3; i++) {
         if (i < 0 || i >= widget.chapter.images.length) continue;
-        final ip =
-            PageImageProvider(widget.chapter.id, widget.chapter.images[i]);
+        final ip = PageImageProvider(
+          widget.chapter.id,
+          widget.chapter.images[i],
+        );
         precacheImage(ip, context);
       }
     }
@@ -1399,8 +1444,12 @@ class _ComicReaderGalleryState extends _ComicReaderState {
         color: Colors.transparent,
         child: Container(
           margin: const EdgeInsets.only(bottom: 10),
-          padding:
-              const EdgeInsets.only(left: 10, right: 10, top: 4, bottom: 4),
+          padding: const EdgeInsets.only(
+            left: 10,
+            right: 10,
+            top: 4,
+            bottom: 4,
+          ),
           decoration: const BoxDecoration(
             borderRadius: BorderRadius.only(
               topLeft: Radius.circular(10),
@@ -1416,8 +1465,10 @@ class _ComicReaderGalleryState extends _ComicReaderState {
                 Navigator.of(context).pop();
               }
             },
-            child: Text(super._hasNextEp() ? '下一章' : '结束阅读',
-                style: const TextStyle(color: Colors.white)),
+            child: Text(
+              super._hasNextEp() ? '下一章' : '结束阅读',
+              style: const TextStyle(color: Colors.white),
+            ),
           ),
         ),
       ),
@@ -1465,17 +1516,19 @@ class _ListViewReaderState extends _ComicReaderState {
   }
 
   void _onListCurrentChange() {
-    final to =
-        _findFirstVisibleIndex(_itemPositionsListener.itemPositions.value);
+    final to = _findFirstVisibleIndex(
+      _itemPositionsListener.itemPositions.value,
+    );
     if (to != null && to >= 0 && to < widget.chapter.images.length) {
       super._onCurrentChange(to);
     }
   }
 
   int? _findFirstVisibleIndex(Iterable<zoomable.ItemPosition> positions) {
-    final visible = positions
-        .where((p) => p.itemTrailingEdge > 0 && p.itemLeadingEdge < 1)
-        .toList();
+    final visible =
+        positions
+            .where((p) => p.itemTrailingEdge > 0 && p.itemLeadingEdge < 1)
+            .toList();
     if (visible.isEmpty) return null;
     visible.sort((a, b) => a.index.compareTo(b.index));
     return visible.first.index;
@@ -1484,9 +1537,7 @@ class _ListViewReaderState extends _ComicReaderState {
   @override
   Widget _buildViewer() {
     return Container(
-      decoration: const BoxDecoration(
-        color: Colors.black,
-      ),
+      decoration: const BoxDecoration(color: Colors.black),
       child: _buildList(),
     );
   }
@@ -1507,7 +1558,8 @@ class _ListViewReaderState extends _ComicReaderState {
                     _trueSizes[index]!.width,
               );
             } else {
-              var maxHeight = constraints.maxHeight -
+              var maxHeight =
+                  constraints.maxHeight -
                   super._appBarHeight() -
                   (super._fullScreen
                       ? super._appBarHeight()
@@ -1525,8 +1577,10 @@ class _ListViewReaderState extends _ComicReaderState {
             } else {
               // ReaderDirection.LEFT_TO_RIGHT
               // ReaderDirection.RIGHT_TO_LEFT
-              renderSize =
-                  Size(constraints.maxWidth / 2, constraints.maxHeight);
+              renderSize = Size(
+                constraints.maxWidth / 2,
+                constraints.maxHeight,
+              );
             }
           }
           var currentIndex = index;
@@ -1552,25 +1606,29 @@ class _ListViewReaderState extends _ComicReaderState {
           minScale: readerZoomMinScale,
           maxScale: readerZoomMaxScale,
           doubleTapScale: readerZoomDoubleTapScale,
-          doubleTapAnimationDuration: currentNoAnimation()
-              ? Duration.zero
-              : const Duration(milliseconds: 200),
+          doubleTapAnimationDuration:
+              currentNoAnimation()
+                  ? Duration.zero
+                  : const Duration(milliseconds: 200),
           enableDoubleTapZoom:
               currentReaderControllerType != ReaderControllerType.touchDouble &&
-                  currentReaderControllerType !=
-                      ReaderControllerType.touchDoubleOnceNext,
+              currentReaderControllerType !=
+                  ReaderControllerType.touchDoubleOnceNext,
           initialScrollIndex: widget.startIndex,
-          scrollDirection: widget.readerDirection == ReaderDirection.topToBottom
-              ? Axis.vertical
-              : Axis.horizontal,
+          scrollDirection:
+              widget.readerDirection == ReaderDirection.topToBottom
+                  ? Axis.vertical
+                  : Axis.horizontal,
           reverse: widget.readerDirection == ReaderDirection.rightToLeft,
           padding: EdgeInsets.only(
-            top: widget.readerDirection == ReaderDirection.topToBottom
-                ? super._appBarHeight()
-                : max(super._appBarHeight(), super._bottomBarHeight()),
-            bottom: widget.readerDirection == ReaderDirection.topToBottom
-                ? 130
-                : max(super._appBarHeight(), super._bottomBarHeight()),
+            top:
+                widget.readerDirection == ReaderDirection.topToBottom
+                    ? super._appBarHeight()
+                    : max(super._appBarHeight(), super._bottomBarHeight()),
+            bottom:
+                widget.readerDirection == ReaderDirection.topToBottom
+                    ? 130
+                    : max(super._appBarHeight(), super._bottomBarHeight()),
           ),
           itemScrollController: _itemScrollController,
           itemPositionsListener: _itemPositionsListener,
@@ -1630,10 +1688,9 @@ class _TwoPageGalleryReaderState extends _ComicReaderState {
     _pageController = PageController(initialPage: widget.startIndex ~/ 2);
     for (var index = 0; index < widget.chapter.images.length; index++) {
       _imageProviderKeys[index] = 0;
-      ips.add(PageImageProvider(
-        widget.chapter.id,
-        widget.chapter.images[index],
-      ));
+      ips.add(
+        PageImageProvider(widget.chapter.id, widget.chapter.images[index]),
+      );
     }
     _buildOptions();
     _buildView();
@@ -1644,9 +1701,10 @@ class _TwoPageGalleryReaderState extends _ComicReaderState {
     _view = PhotoViewGallery(
       pageController: _pageController,
       pageOptions: options,
-      scrollDirection: widget.readerDirection == ReaderDirection.topToBottom
-          ? Axis.vertical
-          : Axis.horizontal,
+      scrollDirection:
+          widget.readerDirection == ReaderDirection.topToBottom
+              ? Axis.vertical
+              : Axis.horizontal,
       reverse: widget.readerDirection == ReaderDirection.rightToLeft,
       onPageChanged: _onGalleryPageChange,
       backgroundDecoration: BoxDecoration(color: Colors.black),
@@ -1685,8 +1743,8 @@ class _TwoPageGalleryReaderState extends _ComicReaderState {
         PhotoViewGalleryPageOptions.customChild(
           disableGestures:
               currentReaderControllerType == ReaderControllerType.touchDouble ||
-                  currentReaderControllerType ==
-                      ReaderControllerType.touchDoubleOnceNext,
+              currentReaderControllerType ==
+                  ReaderControllerType.touchDoubleOnceNext,
           child: LayoutBuilder(
             builder: (BuildContext context, BoxConstraints constraints) {
               return Row(
@@ -1695,9 +1753,10 @@ class _TwoPageGalleryReaderState extends _ComicReaderState {
                     child: Align(
                       alignment: Alignment.centerRight,
                       child: Image(
-                        key: leftIndex >= 0
-                            ? ValueKey(_imageProviderKeys[leftIndex])
-                            : null,
+                        key:
+                            leftIndex >= 0
+                                ? ValueKey(_imageProviderKeys[leftIndex])
+                                : null,
                         image: leftIp,
                         fit: BoxFit.contain,
                         loadingBuilder: (context, child, loadingProgress) {
@@ -1716,9 +1775,10 @@ class _TwoPageGalleryReaderState extends _ComicReaderState {
                             context,
                             constraints.maxWidth / 2,
                             constraints.maxHeight / 2,
-                            onReload: leftIndex >= 0
-                                ? () => _reloadImage(leftIndex)
-                                : null,
+                            onReload:
+                                leftIndex >= 0
+                                    ? () => _reloadImage(leftIndex)
+                                    : null,
                           );
                         },
                       ),
@@ -1728,9 +1788,10 @@ class _TwoPageGalleryReaderState extends _ComicReaderState {
                     child: Align(
                       alignment: Alignment.centerLeft,
                       child: Image(
-                        key: rightIndex >= 0
-                            ? ValueKey(_imageProviderKeys[rightIndex])
-                            : null,
+                        key:
+                            rightIndex >= 0
+                                ? ValueKey(_imageProviderKeys[rightIndex])
+                                : null,
                         image: rightIp,
                         fit: BoxFit.contain,
                         loadingBuilder: (context, child, loadingProgress) {
@@ -1749,9 +1810,10 @@ class _TwoPageGalleryReaderState extends _ComicReaderState {
                             context,
                             constraints.maxWidth / 2,
                             constraints.maxHeight / 2,
-                            onReload: rightIndex >= 0
-                                ? () => _reloadImage(rightIndex)
-                                : null,
+                            onReload:
+                                rightIndex >= 0
+                                    ? () => _reloadImage(rightIndex)
+                                    : null,
                           );
                         },
                       ),
@@ -1779,8 +1841,10 @@ class _TwoPageGalleryReaderState extends _ComicReaderState {
       }
       setState(() {
         _imageProviderKeys[index] = (_imageProviderKeys[index] ?? 0) + 1;
-        ips[index] =
-            PageImageProvider(widget.chapter.id, widget.chapter.images[index]);
+        ips[index] = PageImageProvider(
+          widget.chapter.id,
+          widget.chapter.images[index],
+        );
         _buildOptions();
         // 只重新构建 view，不改变整个组件的 key
         _buildView();
@@ -1797,9 +1861,7 @@ class _TwoPageGalleryReaderState extends _ComicReaderState {
   @override
   void _needJumpTo(int index, bool animation) {
     if (currentNoAnimation() || animation == false) {
-      _pageController.jumpToPage(
-        index ~/ 2,
-      );
+      _pageController.jumpToPage(index ~/ 2);
     } else {
       _pageController.animateToPage(
         index ~/ 2,
@@ -1829,12 +1891,7 @@ class _TwoPageGalleryReaderState extends _ComicReaderState {
   @override
   Widget _buildViewer() {
     return Stack(
-      children: [
-        GestureDetector(
-          child: _view,
-        ),
-        _buildNextEpController(),
-      ],
+      children: [GestureDetector(child: _view), _buildNextEpController()],
     );
   }
 
@@ -1853,15 +1910,20 @@ class _TwoPageGalleryReaderState extends _ComicReaderState {
 
   Widget _buildNextEpController() {
     if (super._fullscreenController() ||
-        _current < widget.chapter.images.length - 2) return Container();
+        _current < widget.chapter.images.length - 2)
+      return Container();
     return Align(
       alignment: Alignment.bottomRight,
       child: Material(
         color: Colors.transparent,
         child: Container(
           margin: const EdgeInsets.only(bottom: 10),
-          padding:
-              const EdgeInsets.only(left: 10, right: 10, top: 4, bottom: 4),
+          padding: const EdgeInsets.only(
+            left: 10,
+            right: 10,
+            top: 4,
+            bottom: 4,
+          ),
           decoration: const BoxDecoration(
             borderRadius: BorderRadius.only(
               topLeft: Radius.circular(10),
