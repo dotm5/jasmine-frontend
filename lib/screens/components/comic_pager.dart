@@ -12,6 +12,8 @@ import 'comic_list.dart';
 import 'reading_widgets.dart';
 
 class ComicPager extends StatefulWidget {
+  /// Reload retained pages without replacing their scrollable on route return.
+  final int refreshRevision;
   final Future<InnerComicPage> Function(int page) onPage;
   final List<ComicLongPressMenuItem>? longPressMenuItems;
   final List<Widget>? appendList;
@@ -22,6 +24,7 @@ class ComicPager extends StatefulWidget {
 
   const ComicPager({
     required this.onPage,
+    this.refreshRevision = 0,
     this.longPressMenuItems,
     this.appendList,
     this.header,
@@ -57,6 +60,7 @@ class _ComicPagerState extends State<ComicPager> {
     switch (currentPagerControllerMode) {
       case PagerControllerMode.stream:
         return _StreamPager(
+          refreshRevision: widget.refreshRevision,
           onPage: widget.onPage,
           longPressMenuItems: widget.longPressMenuItems,
           appendList: widget.appendList,
@@ -67,6 +71,7 @@ class _ComicPagerState extends State<ComicPager> {
         );
       case PagerControllerMode.pager:
         return _PagerPager(
+          refreshRevision: widget.refreshRevision,
           onPage: widget.onPage,
           longPressMenuItems: widget.longPressMenuItems,
           appendList: widget.appendList,
@@ -80,6 +85,7 @@ class _ComicPagerState extends State<ComicPager> {
 }
 
 class _StreamPager extends StatefulWidget {
+  final int refreshRevision;
   final Future<InnerComicPage> Function(int page) onPage;
   final List<ComicLongPressMenuItem>? longPressMenuItems;
   final List<Widget>? appendList;
@@ -91,6 +97,7 @@ class _StreamPager extends StatefulWidget {
   const _StreamPager({
     Key? key,
     required this.onPage,
+    this.refreshRevision = 0,
     this.longPressMenuItems,
     this.appendList,
     this.header,
@@ -107,6 +114,10 @@ class _StreamPagerState extends State<_StreamPager> {
   int _maxPage = 1;
   int _nextPage = 1;
   int _total = 0;
+  int _firstPage = 1;
+  int _pageSize = 0;
+  bool _refreshPending = false;
+  bool _refreshFailed = false;
 
   var _joining = false;
   var _joinSuccess = true;
@@ -120,6 +131,7 @@ class _StreamPagerState extends State<_StreamPager> {
       var response = await widget.onPage(_nextPage);
       if (!mounted) return;
       if (_nextPage == 1) {
+        _pageSize = response.list.length;
         if (_redirectAid(response.redirectAid, context)) {
           return;
         }
@@ -134,15 +146,88 @@ class _StreamPagerState extends State<_StreamPager> {
       _data.addAll(response.list);
       setState(() {
         _joinSuccess = true;
-        _joining = false;
       });
     } catch (e, st) {
       debugPrient("$e\n$st");
       if (!mounted) return;
       setState(() {
         _joinSuccess = false;
-        _joining = false;
       });
+    } finally {
+      _finishRequest();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _StreamPager oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.refreshRevision != widget.refreshRevision) _refresh();
+  }
+
+  void _finishRequest() {
+    if (!mounted) return;
+    setState(() => _joining = false);
+    if (_refreshPending) _refresh();
+  }
+
+  Future<void> _refresh() async {
+    if (_joining) {
+      _refreshPending = true;
+      return;
+    }
+    _refreshPending = false;
+    setState(() => _joining = true);
+    try {
+      // Keep both the old rows and ScrollController attached until every
+      // retained page is ready. Refreshing only page 1 truncates long lists.
+      final refreshed = <ComicSimple>[];
+      var total = _total;
+      var maxPage = _maxPage;
+      var firstPage = _firstPage;
+      var nextPage = firstPage;
+      var pageSize = _pageSize;
+      final endPage = _nextPage > firstPage ? _nextPage : firstPage + 1;
+      for (var page = firstPage; page < endPage; page++) {
+        var response = await widget.onPage(page);
+        if (!mounted) return;
+        if (page == firstPage) {
+          total = response.total;
+          if (page == 1 && response.list.isNotEmpty) {
+            pageSize = response.list.length;
+          }
+          maxPage = total > 0 && pageSize > 0 ? (total / pageSize).ceil() : 1;
+          if (page > maxPage) {
+            // A removed last page should fall back to the last valid page.
+            firstPage = page = maxPage;
+            response = await widget.onPage(page);
+            if (!mounted) return;
+          }
+        }
+        refreshed.addAll(response.list);
+        nextPage = page + 1;
+        if (page >= maxPage) break;
+      }
+      setState(() {
+        _data
+          ..clear()
+          ..addAll(refreshed);
+        _total = total;
+        _maxPage = maxPage;
+        _pageSize = pageSize;
+        _firstPage = firstPage;
+        _nextPage = nextPage;
+        _joinSuccess = true;
+        _refreshFailed = false;
+      });
+    } catch (e, st) {
+      debugPrient('$e\n$st');
+      if (!mounted) return;
+      setState(() {
+        _joinSuccess = false;
+        _refreshFailed = true;
+      });
+    } finally {
+      _finishRequest();
     }
   }
 
@@ -188,6 +273,7 @@ class _StreamPagerState extends State<_StreamPager> {
                   return;
                 }
                 _data.clear();
+                _firstPage = num;
                 _nextPage = num;
                 _join();
               },
@@ -214,7 +300,7 @@ class _StreamPagerState extends State<_StreamPager> {
   }
 
   void _onScroll() {
-    if (_joining || _nextPage > _maxPage) {
+    if (_joining || _refreshFailed || _nextPage > _maxPage) {
       return;
     }
     if (_controller.position.pixels + 100 >
@@ -241,7 +327,7 @@ class _StreamPagerState extends State<_StreamPager> {
       return Card(
         child: InkWell(
           onTap: () {
-            _join();
+            _refreshFailed ? _refresh() : _join();
           },
           child: Column(
             children: [
@@ -315,6 +401,7 @@ class _StreamPagerState extends State<_StreamPager> {
 }
 
 class _PagerPager extends StatefulWidget {
+  final int refreshRevision;
   final Future<InnerComicPage> Function(int page) onPage;
   final List<ComicLongPressMenuItem>? longPressMenuItems;
   final List<Widget>? appendList;
@@ -326,6 +413,7 @@ class _PagerPager extends StatefulWidget {
   const _PagerPager({
     Key? key,
     required this.onPage,
+    this.refreshRevision = 0,
     this.longPressMenuItems,
     this.appendList,
     this.header,
@@ -339,6 +427,8 @@ class _PagerPager extends StatefulWidget {
 }
 
 class _PagerPagerState extends State<_PagerPager> {
+  int _loadVersion = 0;
+  bool _keepDataWhileLoading = false;
   final TextEditingController _textEditController = TextEditingController(
     text: '',
   );
@@ -348,9 +438,12 @@ class _PagerPagerState extends State<_PagerPager> {
   late Future _pageFuture = _load();
 
   Future<dynamic> _load() async {
+    final version = ++_loadVersion;
     final requestedPage = _currentPage;
     var response = await widget.onPage(requestedPage);
-    if (!mounted || requestedPage != _currentPage) return;
+    if (!mounted || version != _loadVersion || requestedPage != _currentPage) {
+      return;
+    }
     setState(() {
       if (_currentPage == 1) {
         if (_redirectAid(response.redirectAid, context)) {
@@ -370,6 +463,15 @@ class _PagerPagerState extends State<_PagerPager> {
   @override
   void initState() {
     super.initState();
+  }
+
+  @override
+  void didUpdateWidget(covariant _PagerPager oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.refreshRevision != widget.refreshRevision) {
+      _keepDataWhileLoading = true;
+      _pageFuture = _load();
+    }
   }
 
   @override
@@ -417,11 +519,13 @@ class _PagerPagerState extends State<_PagerPager> {
                           icon: Icons.auto_stories_outlined,
                           title: '这里还没有漫画',
                         ),
-                  if (widget.compact && ready && _data.isNotEmpty)
+                  if (widget.compact &&
+                      (ready || _keepDataWhileLoading) &&
+                      _data.isNotEmpty)
                     _buildPagerBar(),
                   ...?widget.appendList,
                 ],
-                data: ready ? _data : const [],
+                data: ready || _keepDataWhileLoading ? _data : const [],
                 longPressMenuItems: widget.longPressMenuItems,
               ),
             ),
@@ -468,6 +572,7 @@ class _PagerPagerState extends State<_PagerPager> {
 
   void _goTo(int page) {
     setState(() {
+      _keepDataWhileLoading = false;
       _currentPage = page;
       _pageFuture = _load();
     });

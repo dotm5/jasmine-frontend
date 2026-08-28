@@ -35,6 +35,7 @@ class _UserScreenState extends State<UserScreen>
   int _tab = 0;
   final _visited = <int>{0};
   final _revisions = [0, 0, 0];
+  int _returnRevision = 0;
   int _folder = 0;
   String _sort = 'mr';
   bool _opening = false;
@@ -70,7 +71,7 @@ class _UserScreenState extends State<UserScreen>
   }
 
   @override
-  void didPopNext() => _refresh();
+  void didPopNext() => _refresh(preserveLists: true);
   @override
   void dispose() {
     routeObserver.unsubscribe(this);
@@ -87,12 +88,16 @@ class _UserScreenState extends State<UserScreen>
     }
   }
 
-  void _refresh() {
+  void _refresh({bool preserveLists = false}) {
     if (!mounted) return;
     setState(() {
       _resume = loadReadingResume();
-      for (var i = 0; i < _revisions.length; i++) {
-        _revisions[i]++;
+      if (preserveLists) {
+        _returnRevision++;
+      } else {
+        for (var i = 0; i < _revisions.length; i++) {
+          _revisions[i]++;
+        }
       }
       if (_visited.contains(2)) _downloads = methods.allDownloads();
     });
@@ -388,6 +393,7 @@ class _UserScreenState extends State<UserScreen>
     }
     return ComicPager(
       key: ValueKey('shelf:$index:${_revisions[index]}'),
+      refreshRevision: _returnRevision,
       compact: true,
       header: _header(),
       emptyState: ReadingEmptyState(
