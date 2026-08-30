@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/physics.dart';
 
+import '../../configs/surface_appearance.dart';
 import 'expressive_page_transitions.dart';
+import 'hot_glass.dart';
 
 class FloatingSearchBarScreen extends StatefulWidget {
   final FloatingSearchBarController controller;
@@ -170,6 +172,7 @@ class _FloatingSearchBarScreenState extends State<FloatingSearchBarScreen>
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final appearance = surfaceAppearance.value;
     return PopScope<void>(
       canPop: !_visible,
       onPopInvokedWithResult: (didPop, _) {
@@ -187,7 +190,14 @@ class _FloatingSearchBarScreenState extends State<FloatingSearchBarScreen>
                 FadeTransition(
                   opacity: _animation,
                   child: ModalBarrier(
-                    color: scheme.scrim.withValues(alpha: .32),
+                    // A surface-coloured veil lowers detail contrast before
+                    // the optical filters sample it. Unlike a black scrim it
+                    // also attenuates dark headings in light mode, keeping
+                    // transparent glass controls readable without frosting.
+                    color:
+                        appearance.isLiquidGlass
+                            ? scheme.surface.withValues(alpha: .82)
+                            : scheme.scrim.withValues(alpha: .32),
                     onDismiss: _hideSearchBar,
                     semanticsLabel: '关闭搜索',
                   ),
@@ -223,62 +233,80 @@ class _FloatingSearchBarScreenState extends State<FloatingSearchBarScreen>
                                 autofocus: true,
                                 child: Column(
                                   children: [
-                                    Material(
-                                      color: scheme.surfaceContainerHigh,
+                                    HotGlassCluster(
                                       borderRadius: BorderRadius.circular(28),
-                                      clipBehavior: Clip.antiAlias,
-                                      child: Padding(
-                                        padding: const EdgeInsets.all(8),
-                                        child: Row(
-                                          children: [
-                                            IconButton(
-                                              tooltip: '关闭搜索',
-                                              onPressed: _hideSearchBar,
-                                              icon: const Icon(
-                                                Icons.arrow_back,
-                                              ),
-                                            ),
-                                            Expanded(
-                                              child: TextField(
-                                                controller:
-                                                    _textEditingController,
-                                                focusNode: _node,
-                                                showCursor: widget.showCursor,
-                                                autocorrect: widget.autocorrect,
-                                                textInputAction:
-                                                    TextInputAction.search,
-                                                onSubmitted: widget.onSubmitted,
-                                                decoration: InputDecoration(
-                                                  hintText:
-                                                      widget.hint ?? '搜索漫画',
-                                                  filled: false,
-                                                  border: InputBorder.none,
-                                                  enabledBorder:
-                                                      InputBorder.none,
-                                                  focusedBorder:
-                                                      InputBorder.none,
-                                                  contentPadding:
-                                                      const EdgeInsets.symmetric(
-                                                        horizontal: 8,
-                                                        vertical: 12,
-                                                      ),
+                                      fallbackColor:
+                                          scheme.surfaceContainerHigh,
+                                      activeTintAlpha: .15,
+                                      activeDarkTintAlpha: .36,
+                                      morphStrength: 0.58,
+                                      refraction: 9,
+                                      dispersion: 1.8,
+                                      child: Material(
+                                        type: MaterialType.transparency,
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(8),
+                                          child: Row(
+                                            children: [
+                                              IconButton(
+                                                tooltip: '关闭搜索',
+                                                onPressed: _hideSearchBar,
+                                                icon: const Icon(
+                                                  Icons.arrow_back,
                                                 ),
                                               ),
-                                            ),
-                                          ],
+                                              Expanded(
+                                                child: TextField(
+                                                  controller:
+                                                      _textEditingController,
+                                                  focusNode: _node,
+                                                  showCursor: widget.showCursor,
+                                                  autocorrect:
+                                                      widget.autocorrect,
+                                                  textInputAction:
+                                                      TextInputAction.search,
+                                                  onSubmitted:
+                                                      widget.onSubmitted,
+                                                  decoration: InputDecoration(
+                                                    hintText:
+                                                        widget.hint ?? '搜索漫画',
+                                                    filled: false,
+                                                    border: InputBorder.none,
+                                                    enabledBorder:
+                                                        InputBorder.none,
+                                                    focusedBorder:
+                                                        InputBorder.none,
+                                                    contentPadding:
+                                                        const EdgeInsets.symmetric(
+                                                          horizontal: 8,
+                                                          vertical: 12,
+                                                        ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
                                         ),
                                       ),
                                     ),
                                     if (widget.panel != null) ...[
                                       const SizedBox(height: 12),
                                       Expanded(
-                                        child: Material(
-                                          color: scheme.surfaceContainerLow,
+                                        child: HotGlassCluster(
                                           borderRadius: BorderRadius.circular(
                                             28,
                                           ),
-                                          clipBehavior: Clip.antiAlias,
-                                          child: widget.panel,
+                                          fallbackColor:
+                                              scheme.surfaceContainerLow,
+                                          activeTintAlpha: .22,
+                                          activeDarkTintAlpha: .42,
+                                          morphStrength: 0.08,
+                                          refraction: 5.5,
+                                          dispersion: 1,
+                                          child: Material(
+                                            type: MaterialType.transparency,
+                                            child: widget.panel,
+                                          ),
                                         ),
                                       ),
                                     ],

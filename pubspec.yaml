@@ -38,3 +38,5 @@ flutter:
   uses-material-design: true
   assets:
     - lib/assets/
+  shaders:
+    - shaders/hot_glass.frag

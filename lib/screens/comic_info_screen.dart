@@ -13,6 +13,7 @@ import 'components/comic_info_card.dart';
 import 'components/comic_list.dart';
 import 'components/continue_read_button.dart';
 import 'components/expressive_page_transitions.dart';
+import 'components/hot_glass.dart';
 import 'components/reading_widgets.dart';
 import 'components/right_click_pop.dart';
 
@@ -329,21 +330,30 @@ class _ComicInfoScreenState extends State<ComicInfoScreen> with RouteAware {
         future: _albumFuture,
         builder: (context, snapshot) {
           if (!snapshot.hasData) return const SizedBox.shrink();
-          return Material(
-            color: Theme.of(context).colorScheme.surface,
-            child: SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-                child: Center(
-                  heightFactor: 1,
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 680),
-                    child: ContinueReadButton(
-                      album: snapshot.requireData,
-                      viewFuture: _viewFuture,
-                      onChoose:
-                          (id, page) => _read(snapshot.requireData, id, page),
+          return HotGlassCluster(
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+            fallbackColor: Theme.of(context).colorScheme.surface,
+            activeTintAlpha: .16,
+            activeDarkTintAlpha: .48,
+            morphStrength: 0.1,
+            refraction: 8,
+            dispersion: 1.4,
+            child: Material(
+              type: MaterialType.transparency,
+              child: SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                  child: Center(
+                    heightFactor: 1,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 680),
+                      child: ContinueReadButton(
+                        album: snapshot.requireData,
+                        viewFuture: _viewFuture,
+                        onChoose:
+                            (id, page) => _read(snapshot.requireData, id, page),
+                      ),
                     ),
                   ),
                 ),

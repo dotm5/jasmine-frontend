@@ -37,6 +37,7 @@ import '../configs/login.dart';
 import '../configs/no_animation.dart';
 import '../configs/proxy.dart';
 import '../configs/search_title_words.dart';
+import '../configs/surface_appearance.dart';
 import '../configs/theme.dart';
 import '../configs/two_page_direction.dart';
 import '../configs/using_right_click_pop.dart';
@@ -280,8 +281,10 @@ class _SettingsState extends State<SettingsScreen> {
               readerZoomDoubleTapScaleSetting(),
               twoGalleryDirectionSetting(context),
             ]),
-            _section('外观与显示', '主题、字号与屏幕方向', Icons.palette_outlined, [
+            _section('外观与显示', '色彩主题、界面材质、字号与屏幕方向', Icons.palette_outlined, [
               themeSetting(context),
+              surfaceStyleSetting(context),
+              glassTransmissionSetting(),
               ...fontSizeAdjustSettings(),
               appOrientationWidget(),
               androidDisplayModeSetting(),

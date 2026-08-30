@@ -20,6 +20,7 @@ import 'package:jasmine/configs/proxy.dart';
 import 'package:jasmine/configs/reader_zoom_scale.dart';
 import 'package:jasmine/configs/recommend_links.dart';
 import 'package:jasmine/configs/search_title_words.dart';
+import 'package:jasmine/configs/surface_appearance.dart';
 import 'package:jasmine/configs/theme.dart';
 import 'package:jasmine/configs/two_page_direction.dart';
 import 'package:jasmine/configs/using_right_click_pop.dart';
@@ -71,6 +72,7 @@ Future initConfigs(BuildContext context) async {
   await initPagerCoverRate();
   await initAutoClean();
   await initTheme();
+  await initSurfaceAppearance();
   await reloadIsPro();
   await initDisableRecommendContent();
   await initRecommendLinks();

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../basic/entities.dart';
+import 'hot_glass.dart';
 import 'images.dart';
 import 'types.dart';
 
@@ -12,27 +13,30 @@ class ReadingSearchEntry extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    return Material(
-      color: colors.surfaceContainerHigh,
+    return HotGlassCluster(
       borderRadius: BorderRadius.circular(24),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-          child: Row(
-            children: [
-              Icon(Icons.search_rounded, color: colors.onSurface),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  '搜索漫画、作者、标签',
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: colors.onSurfaceVariant,
+      fallbackColor: colors.surfaceContainerHigh,
+      morphStrength: 0.72,
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+            child: Row(
+              children: [
+                Icon(Icons.search_rounded, color: colors.onSurface),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    '搜索漫画、作者、标签',
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      color: colors.onSurfaceVariant,
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -376,75 +380,86 @@ class ReaderBottomControls extends StatelessWidget {
             ),
           ),
         );
-    return Material(
-      color: const Color(0xF018171C),
+    return HotGlassCluster(
+      fallbackColor: const Color(0xF018171C),
       borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-      child: SafeArea(
-        top: false,
-        child: Center(
-          heightFactor: 1,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 680),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.only(left: 8),
-                        child: Text(
-                          '${total == 0 ? 0 : value + 1} / $total',
-                          style: TextStyle(
-                            color: colors.onSurface,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ),
-                      Expanded(
-                        child: SliderTheme(
-                          data: SliderTheme.of(context).copyWith(
-                            activeTrackColor: colors.primary,
-                            inactiveTrackColor: colors.surfaceContainerHighest,
-                            thumbColor: colors.primary,
-                            overlayColor: colors.primary.withValues(alpha: .12),
-                            valueIndicatorColor: colors.primary,
-                            valueIndicatorTextStyle: TextStyle(
-                              color: colors.onPrimary,
+      activeTintAlpha: .17,
+      activeDarkTintAlpha: .5,
+      morphStrength: 0.12,
+      refraction: 9,
+      dispersion: 1.6,
+      child: Material(
+        type: MaterialType.transparency,
+        child: SafeArea(
+          top: false,
+          child: Center(
+            heightFactor: 1,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 680),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(left: 8),
+                          child: Text(
+                            '${total == 0 ? 0 : value + 1} / $total',
+                            style: TextStyle(
+                              color: colors.onSurface,
+                              fontSize: 12,
                             ),
-                            showValueIndicator: ShowValueIndicator.always,
-                          ),
-                          child: Slider(
-                            value: value.toDouble(),
-                            min: 0,
-                            max: total > 1 ? (total - 1).toDouble() : 1,
-                            label: '${value + 1} / $total',
-                            semanticFormatterCallback:
-                                (value) =>
-                                    '第 ${value.round() + 1} 页，共 $total 页',
-                            onChanged:
-                                total > 1
-                                    ? (value) => onChanged(value.round())
-                                    : null,
-                            onChangeEnd:
-                                total > 1
-                                    ? (value) => onChangeEnd(value.round())
-                                    : null,
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                  Row(
-                    children: [
-                      action(Icons.list_alt_rounded, '目录', onContents),
-                      action(Icons.skip_previous_rounded, '上一话', onPrevious),
-                      action(Icons.skip_next_rounded, '下一话', onNext),
-                      action(Icons.tune_rounded, '设置', onSettings),
-                    ],
-                  ),
-                ],
+                        Expanded(
+                          child: SliderTheme(
+                            data: SliderTheme.of(context).copyWith(
+                              activeTrackColor: colors.primary,
+                              inactiveTrackColor:
+                                  colors.surfaceContainerHighest,
+                              thumbColor: colors.primary,
+                              overlayColor: colors.primary.withValues(
+                                alpha: .12,
+                              ),
+                              valueIndicatorColor: colors.primary,
+                              valueIndicatorTextStyle: TextStyle(
+                                color: colors.onPrimary,
+                              ),
+                              showValueIndicator: ShowValueIndicator.always,
+                            ),
+                            child: Slider(
+                              value: value.toDouble(),
+                              min: 0,
+                              max: total > 1 ? (total - 1).toDouble() : 1,
+                              label: '${value + 1} / $total',
+                              semanticFormatterCallback:
+                                  (value) =>
+                                      '第 ${value.round() + 1} 页，共 $total 页',
+                              onChanged:
+                                  total > 1
+                                      ? (value) => onChanged(value.round())
+                                      : null,
+                              onChangeEnd:
+                                  total > 1
+                                      ? (value) => onChangeEnd(value.round())
+                                      : null,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    Row(
+                      children: [
+                        action(Icons.list_alt_rounded, '目录', onContents),
+                        action(Icons.skip_previous_rounded, '上一话', onPrevious),
+                        action(Icons.skip_next_rounded, '下一话', onNext),
+                        action(Icons.tune_rounded, '设置', onSettings),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
