@@ -1,6 +1,7 @@
 """Synthetic/negative tests for build helpers; no network or real APK execution."""
 import hashlib
 import io
+import json
 from pathlib import Path
 import struct
 import sys
@@ -84,12 +85,20 @@ class ArtifactToolsTest(unittest.TestCase):
             library = root / "librust.so"
             library.write_bytes(elf_fixture())
 
-            def package(abi="arm64-v8a", data=None):
+            def package(abi="arm64-v8a", data=None, material_font_size=1_100_000):
                 apk = root / "fixture.apk"
                 with zipfile.ZipFile(apk, "w") as archive:
                     archive.writestr("AndroidManifest.xml", b"synthetic manifest, not installable")
                     archive.writestr("classes.dex", b"synthetic dex")
                     archive.writestr(f"lib/{abi}/librust.so", library.read_bytes() if data is None else data)
+                    archive.writestr(
+                        verify_local_apk.FONT_MANIFEST,
+                        json.dumps([{
+                            "family": "MaterialIcons",
+                            "fonts": [{"asset": "fonts/MaterialIcons-Regular.otf"}],
+                        }]),
+                    )
+                    archive.writestr(verify_local_apk.MATERIAL_ICON_FONT, b"font".ljust(material_font_size, b"0"))
                 return apk
 
             self.assertEqual(verify_local_apk.verify(package(), library)["abi"], "arm64-v8a")
@@ -97,6 +106,8 @@ class ArtifactToolsTest(unittest.TestCase):
                 verify_local_apk.verify(package("x86_64"), library)
             with self.assertRaisesRegex(ValueError, "differs"):
                 verify_local_apk.verify(package(data=elf_fixture() + b"changed"), library)
+            with self.assertRaisesRegex(ValueError, "tree-shaken"):
+                verify_local_apk.verify(package(material_font_size=16_000), library)
             library.write_bytes(elf_fixture(exports=False))
             with self.assertRaisesRegex(ValueError, "Missing JNI"):
                 verify_local_apk.verify(package(), library)

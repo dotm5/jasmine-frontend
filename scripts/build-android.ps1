@@ -136,7 +136,7 @@ try {
     $jniDir = 'android\app\src\main\jniLibs\arm64-v8a'
     New-Item -ItemType Directory -Path $jniDir -Force | Out-Null
     Copy-Item -LiteralPath $library -Destination (Join-Path $jniDir 'librust.so')
-    & $flutter build apk --release --no-pub --no-android-gradle-daemon --target-platform android-arm64
+    & $flutter build apk --release --no-pub --no-tree-shake-icons --no-android-gradle-daemon --target-platform android-arm64
     Check-Exit 'Flutter APK'
     $apk = 'build\app\outputs\flutter-apk\app-release.apk'
     & python.exe 'scripts\verify_local_apk.py' $apk --library $library --out '.tmp\apk-verification.json'

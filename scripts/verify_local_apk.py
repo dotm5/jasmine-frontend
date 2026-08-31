@@ -11,6 +11,14 @@ import struct
 import zipfile
 
 
+MATERIAL_ICON_FONT = "assets/flutter_assets/fonts/MaterialIcons-Regular.otf"
+FONT_MANIFEST = "assets/flutter_assets/FontManifest.json"
+# Flutter is pinned to 3.29.3, whose complete Material Icons font is about
+# 1.57 MiB. A tree-shaken font in this project is only about 16 KiB and has
+# already omitted icon codepoints that remain reachable in the release UI.
+MIN_COMPLETE_MATERIAL_ICON_FONT_SIZE = 1_000_000
+
+
 def require(condition, message):
     if not condition:
         raise ValueError(message)
@@ -56,6 +64,18 @@ def verify(apk, library):
         native_files = [name for name in names if name.startswith("lib/") and name.endswith(".so")]
         require({name.split("/")[1] for name in native_files} == {"arm64-v8a"}, "Unexpected packaged ABI")
         require(native_entry in names and "AndroidManifest.xml" in names and "classes.dex" in names, "Incomplete APK")
+        require(FONT_MANIFEST in names, "Missing Flutter font manifest")
+        font_manifest = json.loads(archive.read(FONT_MANIFEST))
+        material_families = [entry for entry in font_manifest if entry.get("family") == "MaterialIcons"]
+        require(len(material_families) == 1, "Missing MaterialIcons font family")
+        material_assets = {font.get("asset") for font in material_families[0].get("fonts", [])}
+        require("fonts/MaterialIcons-Regular.otf" in material_assets, "MaterialIcons font asset is not registered")
+        require(MATERIAL_ICON_FONT in names, "MaterialIcons font asset is not packaged")
+        material_icon_font_size = archive.getinfo(MATERIAL_ICON_FONT).file_size
+        require(
+            material_icon_font_size >= MIN_COMPLETE_MATERIAL_ICON_FONT_SIZE,
+            "MaterialIcons font was tree-shaken; release icons may render as missing-glyph boxes",
+        )
         libraries = {}
         for name in native_files:
             data = archive.read(name)
@@ -73,6 +93,7 @@ def verify(apk, library):
     return {
         "apk_sha256": hashlib.sha256(apk.read_bytes()).hexdigest(),
         "expected_library_sha256": expected, "abi": "arm64-v8a", "libraries": libraries,
+        "material_icons": {"asset": MATERIAL_ICON_FONT, "size": material_icon_font_size, "complete_font": True},
         "scope": "Static package/ELF checks only; no device execution or live API validation",
     }
 

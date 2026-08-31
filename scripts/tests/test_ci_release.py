@@ -7,6 +7,13 @@ from prepare_ci_release import check_packaged_manifest, check_signer, validate_r
 
 
 class CiReleaseTests(unittest.TestCase):
+    def test_release_builds_keep_the_complete_material_icon_font(self):
+        root = Path(__file__).resolve().parents[2]
+        for relative in [".github/workflows/Release.yml", "scripts/build-android.ps1"]:
+            command_file = (root / relative).read_text(encoding="utf-8")
+            self.assertIn("flutter build apk", command_file)
+            self.assertIn("--no-tree-shake-icons", command_file)
+
     def test_full_revision_only(self):
         self.assertEqual(validate_revision("a" * 40), "a" * 40)
         for value in ["master", "a" * 12, "a" * 40 + "\n", "../native"]:
