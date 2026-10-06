@@ -236,9 +236,11 @@ void addVolumeListen() {
 }
 
 void delVolumeListen() {
+  if (_volumeListenCount == 0) return;
   _volumeListenCount--;
   if (_volumeListenCount == 0) {
     volumeS?.cancel();
+    volumeS = null;
   }
 }
 
@@ -292,6 +294,7 @@ class _ComicReader extends StatefulWidget {
 }
 
 abstract class _ComicReaderState extends State<_ComicReader> {
+  bool _volumeListening = false;
   bool _sliderDragging = false;
   Widget _buildViewer();
 
@@ -370,7 +373,8 @@ abstract class _ComicReaderState extends State<_ComicReader> {
     _current = widget.startIndex;
     _slider = widget.startIndex;
     _readerControllerEvent.subscribe(_onPageControl);
-    if (currentVolumeKeyControl()) {
+    _volumeListening = currentVolumeKeyControl();
+    if (_volumeListening) {
       addVolumeListen();
     }
     _rebuildSeriesCache();
@@ -395,7 +399,7 @@ abstract class _ComicReaderState extends State<_ComicReader> {
   @override
   void dispose() {
     _readerControllerEvent.unsubscribe(_onPageControl);
-    if (currentVolumeKeyControl()) {
+    if (_volumeListening) {
       delVolumeListen();
     }
     if (Platform.isAndroid || Platform.isIOS) {

@@ -18,7 +18,11 @@ def inspect_surface(frontend, native, android, ios, contract):
         r'_channel\s*\.\s*invokeMethod(?:<[^>]+>)?\(\s*"([^"]+)"', frontend))
     dispatcher = native.split("async fn match_method(", 1)[1].split(
         "\nasync fn init_dart(", 1)[0]
-    handlers = set(re.findall(r'"(\w+)"\s*(?=\||=>)', dispatcher))
+    # Match complete dispatcher arms. A pattern alternative inside matches!(...)
+    # is a property value, not a published bridge method.
+    handlers = set()
+    for arm in re.findall(r'((?:"[A-Za-z0-9_]+"\s*\|\s*)*"[A-Za-z0-9_]+")\s*=>', dispatcher):
+        handlers.update(re.findall(r'"([^"]+)"', arm))
     published = set(contract["methods"])
     android_handlers = set(re.findall(r'"(\w+)"\s*->', android))
     ios_handlers = set(re.findall(r'case\s+"(\w+)"\s*:', ios))

@@ -118,6 +118,7 @@ class _BrowserBottomSheetState extends State<_BrowserBottomSheet> {
                 defaultToast(context, "清理中");
                 try {
                   await methods.cleanAllCache();
+                  PaintingBinding.instance.imageCache.clear();
                   defaultToast(context, "清理成功");
                 } catch (e) {
                   debugPrient("$e");
@@ -178,7 +179,7 @@ class _BrowserBottomSheetState extends State<_BrowserBottomSheet> {
                   Container(height: 3),
                   Text(
                     title,
-                    style: TextStyle(color: Colors.white, fontSize: 10),
+                    style: const TextStyle(color: Colors.white, fontSize: 10),
                     maxLines: 1,
                     textAlign: TextAlign.center,
                   ),
