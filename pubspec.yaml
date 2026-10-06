@@ -40,3 +40,4 @@ flutter:
     - lib/assets/
   shaders:
     - shaders/hot_glass.frag
+    - shaders/hot_glass_backdrop.frag

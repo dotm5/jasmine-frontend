@@ -1,11 +1,26 @@
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../../configs/surface_appearance.dart';
+
+/// Resolves a shared, screen-space key light into the direction seen by one
+/// glass surface. Keeping the light anchored to the window prevents every
+/// control from rendering the same centre-symmetric reflection.
+@visibleForTesting
+Offset glassLightDirectionForRect(Rect globalBounds, Size screenSize) {
+  const fallback = Offset(-0.78, -0.62);
+  if (globalBounds.isEmpty || screenSize.isEmpty) return fallback;
+
+  final lightAnchor = Offset(screenSize.width * 0.16, screenSize.height * 0.10);
+  final delta = lightAnchor - globalBounds.center;
+  if (!delta.dx.isFinite || !delta.dy.isFinite || delta.distance < 1) {
+    return fallback;
+  }
+  return delta / delta.distance;
+}
 
 /// An opt-in glass surface for UI hotspots, not a replacement for Material 3.
 ///
@@ -56,22 +71,27 @@ class HotGlassCluster extends StatefulWidget {
 }
 
 class _HotGlassClusterState extends State<HotGlassCluster>
-    with SingleTickerProviderStateMixin {
-  static Future<ui.FragmentProgram>? _cachedProgram;
+    with TickerProviderStateMixin {
+  static Future<List<ui.FragmentProgram>>? _cachedProgram;
 
   final _surfaceKey = GlobalKey();
-  final _clock = Stopwatch()..start();
   late final AnimationController _press;
-  Future<ui.FragmentProgram>? _program;
+  Future<List<ui.FragmentProgram>>? _program;
   ui.FragmentShader? _shader;
+  ui.FragmentShader? _backdropShader;
+  late final AnimationController _motion;
   Offset _pointer = const Offset(0.5, 0.5);
-  double _velocity = 0;
+  double get _velocity => _motion.value;
 
   bool get _shaderFilterSupported => ui.ImageFilter.isShaderFilterSupported;
 
   @override
   void initState() {
     super.initState();
+    _motion = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 320),
+    );
     _press = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 240),
@@ -79,17 +99,20 @@ class _HotGlassClusterState extends State<HotGlassCluster>
     );
   }
 
-  Future<ui.FragmentProgram>? _ensureProgram() {
+  Future<List<ui.FragmentProgram>>? _ensureProgram() {
     if (!_shaderFilterSupported) return null;
     return _program ??=
-        _cachedProgram ??= ui.FragmentProgram.fromAsset(
-          'shaders/hot_glass.frag',
-        );
+        _cachedProgram ??= Future.wait([
+          ui.FragmentProgram.fromAsset('shaders/hot_glass.frag'),
+          ui.FragmentProgram.fromAsset('shaders/hot_glass_backdrop.frag'),
+        ]);
   }
 
   @override
   void dispose() {
     _shader?.dispose();
+    _backdropShader?.dispose();
+    _motion.dispose();
     _press.dispose();
     super.dispose();
   }
@@ -127,7 +150,7 @@ class _HotGlassClusterState extends State<HotGlassCluster>
     if (mounted) {
       setState(() {
         _pointer = next;
-        _velocity = nextVelocity;
+        _setMotion(nextVelocity);
       });
     }
   }
@@ -136,7 +159,7 @@ class _HotGlassClusterState extends State<HotGlassCluster>
     if (event is! PointerScrollEvent || !widget.interactive) return;
     _trackPointer(event, includeVelocity: false);
     final speed = (event.scrollDelta.distance / 72).clamp(0.0, 1.0);
-    if (mounted) setState(() => _velocity = speed);
+    if (mounted) _setMotion(speed);
   }
 
   double get _baseRadius => <double>[
@@ -153,25 +176,52 @@ class _HotGlassClusterState extends State<HotGlassCluster>
     return math.max(_baseRadius, renderObject.size.shortestSide * 0.5);
   }
 
-  void _configureShader(ui.FragmentShader shader) {
-    final dark = Theme.of(context).brightness == Brightness.dark ? 1.0 : 0.0;
-    final morph = (_press.value * widget.morphStrength).clamp(0.0, 1.0);
+  void _setMotion(double velocity) {
+    _motion.stop();
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _motion.value = 0;
+      return;
+    }
+    _motion.value = velocity;
+    _motion.animateTo(0, curve: Curves.easeOutCubic);
+  }
+
+  void _configureShader(ui.FragmentShader shader, Size size) {
+    var light = const Offset(-0.78, -0.62);
+    final box = _surfaceKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box != null && box.hasSize) {
+      final screen = MediaQuery.sizeOf(context);
+      final delta =
+          box.globalToLocal(Offset(screen.width * .16, screen.height * .10)) -
+          box.size.center(Offset.zero);
+      if (delta.distance > 1 && delta.dx.isFinite && delta.dy.isFinite) {
+        light = delta / delta.distance;
+      }
+    }
     shader
-      ..setFloat(2, _clock.elapsedMicroseconds / Duration.microsecondsPerSecond)
-      ..setFloat(3, _press.value)
-      ..setFloat(4, _pointer.dx)
-      ..setFloat(5, _pointer.dy)
-      ..setFloat(6, morph)
-      ..setFloat(7, _baseRadius)
-      ..setFloat(8, widget.refraction)
-      ..setFloat(9, widget.dispersion)
-      ..setFloat(10, widget.fresnel)
-      ..setFloat(11, widget.luminanceBias)
-      ..setFloat(12, dark)
-      ..setFloat(13, _velocity)
-      ..setFloat(14, 0.28)
-      ..setFloat(15, 0.18)
-      ..setFloat(16, defaultTargetPlatform == TargetPlatform.android ? 1 : 0);
+      ..setFloat(0, size.width)
+      ..setFloat(1, size.height)
+      ..setFloat(2, _press.value)
+      ..setFloat(3, _pointer.dx)
+      ..setFloat(4, _pointer.dy)
+      ..setFloat(5, (_press.value * widget.morphStrength).clamp(0.0, 1.0))
+      ..setFloat(6, _baseRadius)
+      ..setFloat(7, widget.fresnel)
+      ..setFloat(8, Theme.of(context).brightness == Brightness.dark ? 1 : 0)
+      ..setFloat(9, _velocity)
+      ..setFloat(10, light.dx)
+      ..setFloat(11, light.dy);
+  }
+
+  void _configureBackdrop(ui.FragmentShader shader) {
+    shader
+      ..setFloat(2, widget.refraction)
+      ..setFloat(3, widget.dispersion)
+      ..setFloat(4, _press.value)
+      ..setFloat(5, _pointer.dx)
+      ..setFloat(6, _pointer.dy)
+      ..setFloat(7, View.of(context).devicePixelRatio)
+      ..setFloat(8, _velocity);
   }
 
   Widget _materialSurface() {
@@ -221,14 +271,16 @@ class _HotGlassClusterState extends State<HotGlassCluster>
     final outline =
         active
             ? Colors.white.withValues(
-              alpha: theme.brightness == Brightness.dark ? 0.38 : 0.48,
+              // The shader owns the directional rim. A strong uniform border
+              // makes the surface read as a symmetric acrylic capsule.
+              alpha: theme.brightness == Brightness.dark ? 0.14 : 0.18,
             )
             : scheme.outlineVariant.withValues(alpha: 0.72);
 
     ui.ImageFilter filter;
     if (active) {
-      _configureShader(shader);
-      filter = ui.ImageFilter.shader(shader);
+      _configureBackdrop(_backdropShader!);
+      filter = ui.ImageFilter.shader(_backdropShader!);
     } else {
       filter = ui.ImageFilter.blur(sigmaX: 16, sigmaY: 16);
     }
@@ -273,7 +325,13 @@ class _HotGlassClusterState extends State<HotGlassCluster>
                 border: Border.all(color: outline),
                 borderRadius: shape,
               ),
-              child: widget.child,
+              child:
+                  active
+                      ? CustomPaint(
+                      painter: _GlassOpticsPainter(shader, _configureShader),
+                        child: widget.child,
+                      )
+                      : widget.child,
             ),
           ),
         ),
@@ -289,14 +347,15 @@ class _HotGlassClusterState extends State<HotGlassCluster>
           if (!appearance.isLiquidGlass) return _materialSurface();
           final program = _ensureProgram();
           return AnimatedBuilder(
-            animation: _press,
+            animation: Listenable.merge([_press, _motion]),
             builder: (context, _) {
               if (program == null) return _surface(appearance);
-              return FutureBuilder<ui.FragmentProgram>(
+              return FutureBuilder<List<ui.FragmentProgram>>(
                 future: program,
                 builder: (context, snapshot) {
                   if (!snapshot.hasData) return _surface(appearance);
-                  _shader ??= snapshot.requireData.fragmentShader();
+                  _shader ??= snapshot.requireData[0].fragmentShader();
+                  _backdropShader ??= snapshot.requireData[1].fragmentShader();
                   return _surface(appearance, shader: _shader);
                 },
               );
@@ -304,4 +363,21 @@ class _HotGlassClusterState extends State<HotGlassCluster>
           );
         },
       );
+}
+
+// Geometry is evaluated in the local paint coordinate system, independently of
+// the backdrop texture's size, pixel density or parent render-pass origin.
+class _GlassOpticsPainter extends CustomPainter {
+  _GlassOpticsPainter(this.shader, this.configure);
+  final ui.FragmentShader shader;
+  final void Function(ui.FragmentShader, Size) configure;
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.isEmpty) return;
+    configure(shader, size);
+    canvas.drawRect(Offset.zero & size, Paint()..shader = shader);
+  }
+
+  @override
+  bool shouldRepaint(covariant _GlassOpticsPainter oldDelegate) => true;
 }

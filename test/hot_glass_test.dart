@@ -1,4 +1,3 @@
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -12,26 +11,21 @@ void main() {
     previewGlassTransmission(SurfaceAppearance.defaultGlassTransmission);
   });
 
-  test('hot glass shader keeps the complete optical feature contract', () {
-    final source = File('shaders/hot_glass.frag').readAsStringSync();
-    final pubspec = File('pubspec.yaml').readAsStringSync();
+  test('glass key light is shared in screen space instead of local centre', () {
+    const screen = Size(400, 800);
+    final upperDirection = glassLightDirectionForRect(
+      const Rect.fromLTWH(24, 72, 352, 80),
+      screen,
+    );
+    final lowerDirection = glassLightDirectionForRect(
+      const Rect.fromLTWH(24, 680, 352, 88),
+      screen,
+    );
 
-    expect(pubspec, contains('shaders/hot_glass.frag'));
-    expect(source, contains('uniform float u_refraction'));
-    expect(source, contains('uniform float u_dispersion'));
-    expect(source, contains('redSample.r'));
-    expect(source, contains('blueSample.b'));
-    expect(source, contains('pow(1.0 - viewDot, 5.0)'));
-    expect(source, contains('uniform vec2 u_pointer'));
-    expect(source, contains('uniform float u_velocity'));
-    expect(source, contains('uniform float u_morph'));
-    expect(source, contains('roundedBoxSdf'));
-    expect(source, contains('float luminance'));
-    expect(source, contains('float contrastRisk'));
-    expect(source, contains('uniform float u_flip_y'));
-    expect(source, contains('if (u_flip_y > 0.5)'));
-    expect(source, contains('float lens = mix(0.10, 0.92'));
-    expect(source, contains('0.06 + edge * 0.86'));
+    expect(upperDirection.distance, closeTo(1, 0.0001));
+    expect(lowerDirection.distance, closeTo(1, 0.0001));
+    expect(lowerDirection.dy, lessThan(upperDirection.dy));
+    expect(lowerDirection, isNot(upperDirection));
   });
 
   testWidgets('hot glass fallback preserves child interaction and semantics', (
