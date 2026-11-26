@@ -73,6 +73,41 @@ void main() {
       await api.clearPat();
     });
 
+    test('endpoint settings preserve cached and custom lists on failure', () async {
+      const custom = 'https://custom.example.test';
+      final initial = (await api.loadEndpointOptions(EndpointKind.api)).custom;
+      await api.saveApiHost(custom);
+      expect(await api.loadApiHost(), 'custom.example.test');
+      await api.saveApiHost(server.origin);
+      final options = await api.loadEndpointOptions(EndpointKind.api);
+      expect(options.custom, containsAll([server.origin, 'custom.example.test']));
+      await expectLater(
+        api.removeCustomEndpoint(EndpointKind.api, server.origin),
+        throwsStateError,
+      );
+      await api.removeCustomEndpoint(EndpointKind.api, custom);
+      expect(
+        (await api.loadEndpointOptions(EndpointKind.api)).custom,
+        initial,
+      );
+
+      await api.saveProperty('api_host_discovered', '["https://cached.example.test"]');
+      await api.saveProperty('cdn_host_discovered', '["https://images.example.test"]');
+      final proxy = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+      proxy.listen((socket) => socket.destroy());
+      addTearDown(proxy.close);
+      await api.setProxy('http://127.0.0.1:${proxy.port}');
+      final result = await api.refreshEndpoints();
+
+      expect(result.api.error, isNotNull);
+      expect(result.cdn.error, isNotNull);
+      expect((await api.loadEndpointOptions(EndpointKind.api)).official.first,
+          'cached.example.test');
+      expect((await api.loadEndpointOptions(EndpointKind.cdn)).official.first,
+          'images.example.test');
+      expect(await api.loadApiHost(), server.origin);
+    });
+
     test(
       'category, ordinary rankings, search and games decode nonempty DTOs',
       () async {

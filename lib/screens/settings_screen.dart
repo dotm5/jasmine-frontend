@@ -15,6 +15,7 @@ import 'package:jasmine/configs/drag_region_lock.dart';
 import 'package:jasmine/configs/gesture_speed.dart';
 import 'package:jasmine/configs/network_api_host.dart';
 import 'package:jasmine/configs/network_cdn_host.dart';
+import 'package:jasmine/configs/network_endpoint_settings.dart';
 import 'package:jasmine/configs/reader_zoom_scale.dart';
 import 'package:jasmine/screens/downloads_exports_screen2.dart';
 
@@ -249,6 +250,7 @@ class _SettingsState extends State<SettingsScreen> {
               ),
               apiHostSetting(),
               cdnHostSetting(),
+              const RefreshEndpointsTile(),
               proxySetting(),
             ]),
             _section('账号与收藏', '收藏夹管理、退出登录', Icons.manage_accounts_outlined, [

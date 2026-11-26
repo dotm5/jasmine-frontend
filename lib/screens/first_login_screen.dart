@@ -9,6 +9,7 @@ import '../configs/is_pro.dart';
 import '../configs/login.dart';
 import '../configs/network_api_host.dart';
 import '../configs/network_cdn_host.dart';
+import 'package:jasmine/configs/network_endpoint_settings.dart';
 import 'app_screen.dart';
 import 'components/recommend_links_panel.dart';
 
@@ -129,6 +130,7 @@ class _FirstLoginScreenState extends State<FirstLoginScreen> {
         _passwordField(),
         apiHostSetting(),
         cdnHostSetting(),
+        const RefreshEndpointsTile(),
         Container(
           padding: const EdgeInsets.all(15),
           child: const LoginAgreementHint(

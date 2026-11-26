@@ -2,15 +2,14 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:jasmine/basic/methods.dart';
+import 'package:jasmine/basic/commons.dart' show defaultToast;
 
+import 'network_endpoint_settings.dart';
 import 'network_host.dart';
 
 late String _apiHost;
 
-// Keep the current Rust/downloader default (API_DOMAIN_2) visible even when
-// the backend list is unavailable.  The remaining values are the local
-// fallback from the original Jasmine screen; JMcomic3 adds cdngwc.club.
-const _defaultApiHost = 'www.cdnhth.cc';
+const _defaultApiHost = 'www.cdnbtd.cc';
 const _base64List = [
   "d3d3LmNkbmJlYS5uZXQ=",
   "d3d3LmNkbmh0aC5uZXQ=",
@@ -18,7 +17,11 @@ const _base64List = [
   "d3d3LmNkbmh0aC5jbHVi",
 ];
 
-const _additionalFallbackApiHosts = <String>['www.cdngwc.club'];
+const _additionalFallbackApiHosts = <String>[
+  'www.cdnutc.cc',
+  'www.cdngwc.net',
+  'www.cdngwc.club',
+];
 
 var _apiList = <String>[];
 
@@ -54,78 +57,6 @@ String normalizeApiHostCandidate(Object? raw, {String fallback = ''}) {
 
 void _mergeApiList(Iterable<Object?> items) {
   _apiList = mergeNetworkHostCandidates(<Object?>[..._apiList, ...items]);
-}
-
-Future<T?> chooseApiDialog<T>(BuildContext buildContext) async {
-  return await showDialog<T>(
-    context: buildContext,
-    builder: (BuildContext context) {
-      return SimpleDialog(
-        title: const Text("内容线路"),
-        children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(24, 0, 24, 12),
-            child: Text('测速仅供参考，请以实际加载结果为准。'),
-          ),
-          ..._apiList.map(
-            (e) => SimpleDialogOption(
-              child: ApiOptionRow(e, key: Key("API:${e}")),
-              onPressed: () {
-                Navigator.of(context).pop(e);
-              },
-            ),
-          ),
-          SimpleDialogOption(
-            child: const Text("手动输入"),
-            onPressed: () async {
-              final value = await _manualInputApiHost(context);
-              if (context.mounted && value != null) {
-                Navigator.of(context).pop(value);
-              }
-            },
-          ),
-          SimpleDialogOption(
-            child: const Text("取消"),
-            onPressed: () {
-              Navigator.of(context).pop(null);
-            },
-          ),
-        ],
-      );
-    },
-  );
-}
-
-final TextEditingController _controller = TextEditingController();
-
-Future<String?> _manualInputApiHost(BuildContext context) async {
-  _controller.text = _apiHost;
-  return await showDialog(
-    context: context,
-    builder: (BuildContext context) {
-      return AlertDialog(
-        title: const Text("输入内容线路地址"),
-        content: TextField(
-          controller: _controller,
-          decoration: const InputDecoration(hintText: "www.example.com"),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-            },
-            child: const Text("取消"),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.of(context).pop(_controller.text);
-            },
-            child: const Text("确定"),
-          ),
-        ],
-      );
-    },
-  );
 }
 
 class ApiOptionRow extends StatefulWidget {
@@ -195,16 +126,22 @@ class PingStatus extends StatelessWidget {
   }
 }
 
-Future chooseApiHost(BuildContext context) async {
-  final choose = await chooseApiDialog(context);
-  if (choose != null) {
-    final normalized = normalizeApiHostCandidate(
-      choose,
-      fallback: _defaultApiHost,
-    );
-    await methods.saveApiHost(normalized);
-    _apiHost = normalized;
+Future<void> chooseApiHost(BuildContext context) async {
+  final choose = await chooseNetworkEndpoint(
+    context,
+    kind: EndpointKind.api,
+    title: '内容线路',
+    selected: _apiHost,
+    fallback: _apiList,
+    row: (host) => ApiOptionRow(host, key: ValueKey(host)),
+  );
+  if (choose == null || !context.mounted) return;
+  try {
+    await methods.saveApiHost(choose);
+    _apiHost = await methods.loadApiHost();
     _mergeApiList(<Object?>[_apiHost]);
+  } catch (error) {
+    if (context.mounted) defaultToast(context, '$error');
   }
 }
 
