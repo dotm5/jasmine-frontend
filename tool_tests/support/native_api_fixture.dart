@@ -170,6 +170,8 @@ class ApiFixture {
     switch (path) {
       case '/':
         data = <String, dynamic>{};
+      case '/setting':
+        data = {'img_host': 'https://images.example.test'};
       case '/login':
         request.response.headers.add('set-cookie', 'session=fixture==; Path=/');
         data = userFixture();

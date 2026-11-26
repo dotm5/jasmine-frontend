@@ -11,6 +11,7 @@ import 'package:jasmine/configs/configs.dart';
 import 'package:jasmine/configs/login.dart';
 import 'package:jasmine/configs/network_api_host.dart';
 import 'package:jasmine/configs/network_cdn_host.dart';
+import 'package:jasmine/configs/network_endpoint_settings.dart';
 import 'package:jasmine/configs/theme.dart' as app_theme;
 import 'package:jasmine/screens/about_screen.dart';
 import 'package:jasmine/screens/app_screen.dart';
@@ -31,6 +32,8 @@ void main() {
   final calls = <Map<String, dynamic>>[];
   var signedIn = false;
   var loginError = false;
+  var endpointsRefreshed = false;
+  var customEndpointRemoved = false;
   final properties = <String, String>{};
   final boundaryKey = GlobalKey();
 
@@ -51,6 +54,8 @@ void main() {
     calls.clear();
     signedIn = false;
     loginError = false;
+    endpointsRefreshed = false;
+    customEndpointRemoved = false;
     properties
       ..clear()
       ..addAll({'checkVersionPeriod': '-1'});
@@ -72,6 +77,23 @@ void main() {
             case 'app_config':
             case 'config_links':
               response = '{}';
+            case 'endpoint_options':
+              if (endpointsRefreshed) {
+                response = jsonEncode({
+                  'official': ['new-api.example.test'],
+                  'custom': [
+                    if (!customEndpointRemoved) 'custom-api.example.test',
+                  ],
+                });
+              }
+            case 'remove_custom_endpoint':
+              customEndpointRemoved = true;
+            case 'refresh_endpoints':
+              endpointsRefreshed = true;
+              response = jsonEncode({
+                'api': {'count': 1, 'error': null},
+                'cdn': {'count': 0, 'error': 'fixture timeout'},
+              });
             case 'page_view_log':
               response = jsonEncode({
                 'search_query': '',
@@ -85,6 +107,7 @@ void main() {
             case 'load_download_thread':
               response = '2';
             case 'ping':
+            case 'ping_server':
             case 'ping_cdn':
               response = '120';
             case 'pro_info_all':
@@ -480,6 +503,39 @@ void main() {
     );
     await tester.pump();
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('refresh results and saved custom endpoints appear in picker', (
+    tester,
+  ) async {
+    await initApiHost();
+    await tester.pumpWidget(
+      app(
+        Scaffold(
+          body: Column(children: [
+            apiHostSetting(),
+            const RefreshEndpointsTile(),
+          ]),
+        ),
+      ),
+    );
+    await tester.tap(find.text('更新线路列表'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('内容线路已获取 1 条'), findsOneWidget);
+    expect(find.textContaining('图片线路更新失败'), findsOneWidget);
+
+    await tester.tap(find.text('内容线路'));
+    await tester.pumpAndSettle();
+    expect(find.text('new-api.example.test'), findsOneWidget);
+    expect(find.text('custom-api.example.test'), findsOneWidget);
+    await tester.tap(find.byTooltip('删除自定义线路'));
+    await tester.pumpAndSettle();
+    expect(find.text('custom-api.example.test'), findsNothing);
+    final remove = calls.singleWhere((q) => q['method'] == 'remove_custom_endpoint');
+    expect(jsonDecode(remove['params'] as String), {
+      'kind': 'api',
+      'host': 'custom-api.example.test',
+    });
   });
 
   testWidgets('long network hosts fit and manual cancel keeps picker', (

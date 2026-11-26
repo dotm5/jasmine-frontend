@@ -2,7 +2,9 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:jasmine/basic/methods.dart';
+import 'package:jasmine/basic/commons.dart' show defaultToast;
 
+import 'network_endpoint_settings.dart';
 import 'network_host.dart';
 
 late String _cdnHost;
@@ -64,16 +66,22 @@ void _mergeCdnList(Iterable<Object?> items) {
   _cdnList = mergeNetworkHostCandidates(<Object?>[..._cdnList, ...items]);
 }
 
-Future chooseCdnHost(BuildContext context) async {
-  final choose = await chooseCdnDialog(context);
-  if (choose != null) {
-    final normalized = normalizeCdnHostCandidate(
-      choose,
-      fallback: _defaultCdnHost,
-    );
-    await methods.saveCdnHost(normalized);
-    _cdnHost = normalized;
+Future<void> chooseCdnHost(BuildContext context) async {
+  final choose = await chooseNetworkEndpoint(
+    context,
+    kind: EndpointKind.cdn,
+    title: '图片线路',
+    selected: _cdnHost,
+    fallback: _cdnList,
+    row: (host) => CdnOptionRow(host, key: ValueKey(host)),
+  );
+  if (choose == null || !context.mounted) return;
+  try {
+    await methods.saveCdnHost(choose);
+    _cdnHost = await methods.loadCdnHost();
     _mergeCdnList(<Object?>[_cdnHost]);
+  } catch (error) {
+    if (context.mounted) defaultToast(context, '$error');
   }
 }
 
@@ -88,78 +96,6 @@ Widget cdnHostSetting() {
         title: const Text("图片线路"),
         trailing: const Icon(Icons.chevron_right),
         subtitle: Text(_cdnHost),
-      );
-    },
-  );
-}
-
-Future<T?> chooseCdnDialog<T>(BuildContext buildContext) async {
-  return await showDialog<T>(
-    context: buildContext,
-    builder: (BuildContext context) {
-      return SimpleDialog(
-        title: const Text("图片线路"),
-        children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(24, 0, 24, 12),
-            child: Text('测速仅供参考，请以实际加载结果为准。'),
-          ),
-          ..._cdnList.map(
-            (e) => SimpleDialogOption(
-              child: CdnOptionRow(e, key: Key("CDN:${e}")),
-              onPressed: () {
-                Navigator.of(context).pop(e);
-              },
-            ),
-          ),
-          SimpleDialogOption(
-            child: const Text("手动输入"),
-            onPressed: () async {
-              final value = await _manualInputApiHost(context);
-              if (context.mounted && value != null) {
-                Navigator.of(context).pop(value);
-              }
-            },
-          ),
-          SimpleDialogOption(
-            child: const Text("取消"),
-            onPressed: () {
-              Navigator.of(context).pop(null);
-            },
-          ),
-        ],
-      );
-    },
-  );
-}
-
-final TextEditingController _controller = TextEditingController();
-
-Future<String?> _manualInputApiHost(BuildContext context) async {
-  _controller.text = _cdnHost;
-  return await showDialog(
-    context: context,
-    builder: (BuildContext context) {
-      return AlertDialog(
-        title: const Text("输入图片线路地址"),
-        content: TextField(
-          controller: _controller,
-          decoration: const InputDecoration(hintText: "www.example.com"),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-            },
-            child: const Text("取消"),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.of(context).pop(_controller.text);
-            },
-            child: const Text("确定"),
-          ),
-        ],
       );
     },
   );

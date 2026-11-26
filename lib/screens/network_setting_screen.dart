@@ -2,6 +2,7 @@ import 'package:jasmine/screens/components/expressive_page_transitions.dart';
 import 'package:flutter/material.dart';
 import 'package:jasmine/configs/network_api_host.dart';
 import 'package:jasmine/configs/network_cdn_host.dart';
+import 'package:jasmine/configs/network_endpoint_settings.dart';
 import 'package:jasmine/configs/proxy.dart';
 import 'package:jasmine/screens/init_screen.dart';
 
@@ -60,6 +61,7 @@ class NetworkSettingScreen extends StatelessWidget {
           ),
           apiHostSetting(),
           cdnHostSetting(),
+          const RefreshEndpointsTile(),
           proxySetting(),
         ],
       ),

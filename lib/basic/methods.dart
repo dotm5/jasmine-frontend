@@ -13,6 +13,34 @@ export 'entities.dart';
 
 const methods = Methods();
 
+enum EndpointKind { api, cdn }
+
+class EndpointOptions {
+  const EndpointOptions({required this.official, required this.custom});
+
+  final List<String> official;
+  final List<String> custom;
+
+  factory EndpointOptions.fromJson(Map<String, dynamic> json) =>
+      EndpointOptions(
+        official: List<String>.from(json['official'] as List),
+        custom: List<String>.from(json['custom'] as List),
+      );
+}
+
+class EndpointRefresh {
+  const EndpointRefresh({required this.count, this.error});
+
+  final int count;
+  final String? error;
+
+  factory EndpointRefresh.fromJson(Map<String, dynamic> json) =>
+      EndpointRefresh(
+        count: json['count'] as int,
+        error: json['error'] as String?,
+      );
+}
+
 class Methods {
   const Methods({
     this.backend = const BackendClient(MethodChannelBackendTransport()),
@@ -253,6 +281,28 @@ class Methods {
 
   Future saveCdnHost(String choose) {
     return _invoke("save_cdn_host", choose);
+  }
+
+  Future<EndpointOptions> loadEndpointOptions(EndpointKind kind) async {
+    final response = await _invoke("endpoint_options", {'kind': kind.name});
+    return EndpointOptions.fromJson(
+      jsonDecode(response) as Map<String, dynamic>,
+    );
+  }
+
+  Future<void> removeCustomEndpoint(EndpointKind kind, String host) async {
+    await _invoke("remove_custom_endpoint", {'kind': kind.name, 'host': host});
+  }
+
+  Future<({EndpointRefresh api, EndpointRefresh cdn})>
+  refreshEndpoints() async {
+    final response =
+        jsonDecode(await _invoke("refresh_endpoints", ''))
+            as Map<String, dynamic>;
+    return (
+      api: EndpointRefresh.fromJson(response['api'] as Map<String, dynamic>),
+      cdn: EndpointRefresh.fromJson(response['cdn'] as Map<String, dynamic>),
+    );
   }
 
   Future<PreLoginResponse> preLogin() async {
